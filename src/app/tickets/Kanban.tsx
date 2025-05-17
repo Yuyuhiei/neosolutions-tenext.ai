@@ -3,7 +3,7 @@
 'use client'; // This page uses client-side state and interactions
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'; // Import hooks
-import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge, ArrowDownRight } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge, ArrowDownRight)
+import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge, ArrowDownRight)
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'; // Import Gemini library
 import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData'; // Import hardcoded data
 
@@ -1111,18 +1111,6 @@ ${formattedKB}
     };
 
 
-    // Function to simulate sending reply (This is now just a simulation alert, not the actual send)
-     // Renamed the old handleSendReply to avoid conflict and keep the new one for actual send.
-    const handleSimulateSendReplyAlert = () => {
-        if (composeReply.trim()) {
-            alert(`Simulating sending reply (old method):\n\n${composeReply}`);
-            // Don't clear composeReply here if the actual send button clears it
-        } else {
-             alert('Compose reply is empty.');
-        }
-    };
-
-
     // Function to populate compose reply with a suggestion (Moved from page.tsx)
     const handleSuggestionClick = (suggestion: string) => {
         setComposeReply(suggestion);
@@ -1965,22 +1953,6 @@ Keep the response concise and professional.`;
                              : 'Showing related concerns. Select tickets below to send a tailored response.'
                          }
                     </p>
-
-                    {/* Conceptual Visualization (Simplified) */}
-                    {/* This is a placeholder for the arrow visualization from your screenshot.
-                        Implementing actual SVG/canvas drawing for arrows between dynamic elements
-                        is complex and requires calculating positions. For this demo, we'll
-                        just show the related tickets grouped by department.
-                    */}
-                     {/*
-                     <div className="flex items-center justify-center my-6">
-                         <div className="flex flex-col items-center">
-                             <div className="text-center font-semibold text-gray-800 mb-2">Current Ticket ({selectedTicket ? selectedTicket.id : 'Default'})</div>
-                             <ArrowDownRight className="w-8 h-8 text-blue-500" />
-                         </div>
-                         <div className="ml-8 text-center font-semibold text-gray-800">Related Concerns</div>
-                     </div>
-                     */}
 
                     {/* Related Tickets Grouped by Department */}
                     <div className="space-y-6">

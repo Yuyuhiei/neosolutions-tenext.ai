@@ -13,7 +13,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Ticket, User, MessageSquare, Book, Settings, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
+import { Ticket, User, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
 
 // Import hardcoded ticket data to derive insights
 import { hardcodedTickets } from './lib/hardcodedData';
