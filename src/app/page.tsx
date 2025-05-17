@@ -13,7 +13,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Ticket, User, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
+import { Ticket, User, MessageSquare, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
 
 // Import hardcoded ticket data to derive insights
 import { hardcodedTickets } from './lib/hardcodedData';
@@ -88,6 +88,7 @@ const hardcodedMetrics = {
 const featureButtons = [
   { name: 'Ticket Management', icon: Ticket, href: '/tickets' }, // TODO: Update hrefs
   { name: 'Customer Info', icon: User, href: '/customers' },
+  { name: 'Low Level Concerns', icon: MessageSquare, href: '/concerns' },
 ];
 
 
