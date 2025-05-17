@@ -7,6 +7,7 @@ import Link from 'next/link'; // Import Link for navigation
 import { GoogleGenerativeAI } from '@google/generative-ai'; // Import Gemini library
 import { hardcodedKnowledgeBase } from '../lib/hardcodedData'; // Import hardcoded KB data
 import { Send, Eraser } from 'lucide-react'; // Icons for buttons
+import TicketManagementPage from './Kanban';
 
 // --- WARNING: SECURITY RISK ---
 // Exposing your API key directly in client-side code is NOT secure for production applications.
@@ -243,7 +244,7 @@ Relevant KB Articles: None found.
 
 
             {/* Main Processing Area - Two Columns */}
-            <main className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+            <main className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6 mb-30">
 
                 {/* Left Column */}
                 <div className="flex flex-col gap-6">
@@ -363,8 +364,9 @@ Relevant KB Articles: None found.
                 </section>
 
                 </div> {/* End Right Column */}
-
             </main>
+
+            <TicketManagementPage /> {/* Include the Kanban board component here */}
 
         </div>
     );
