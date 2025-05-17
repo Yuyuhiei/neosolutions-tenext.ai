@@ -4,8 +4,8 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'; // Import hooks
 import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone } from 'lucide-react'; // Import icons
-import { GoogleGenerativeAI } from '@google/generative-ai'; // Import Gemini library
-import { hardcodedKnowledgeBase } from '../lib/hardcodedData'; // Import hardcoded KB data
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'; // Import Gemini library
+import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData'; // Import hardcoded data
 
 
 // --- WARNING: SECURITY RISK ---
@@ -16,7 +16,7 @@ import { hardcodedKnowledgeBase } from '../lib/hardcodedData'; // Import hardcod
 const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM";
 
 if (!apiKey) {
-    console.error("NEXT_PUBLIC_GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
+    console.error("GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
     // You might want to display a user-facing error message if the key is missing
 }
 
@@ -33,6 +33,17 @@ const formatKnowledgeBase = (kb: typeof hardcodedKnowledgeBase) => {
 
 // Format the entire hardcoded KB for the prompt
 const formattedKB = formatKnowledgeBase(hardcodedKnowledgeBase);
+
+// Helper function to format departments/agents for the prompt
+const formatDepartmentsForPrompt = (departments: typeof hardcodedDepartments) => {
+     if (!departments || departments.length === 0) return "No departments available.";
+     return departments.map(dept =>
+         `Department: ${dept.name}\nAgents: ${dept.agents.join(', ')}\nDescription: ${dept.description}`
+     ).join('\n\n');
+};
+
+// Format the entire hardcoded departments data for the prompt
+const formattedDepartments = formatDepartmentsForPrompt(hardcodedDepartments);
 
 
 // Declare SpeechRecognition globally to avoid TypeScript errors
@@ -220,31 +231,92 @@ const priorityColors: Record<Ticket['priority'], string> = {
 // Define the order of columns/statuses for the Kanban board
 const kanbanStatuses: Ticket['status'][] = ['New', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
 
-// ADDED: Helper function to add a new hardcoded ticket
-const addNewHardcodedTicket = (setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>) => {
+// ADDED: Helper function to add a new hardcoded ticket with AI assignment
+const addNewHardcodedTicket = async (setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>, model: GenerativeModel | null, initialConcern: string = 'Automated transcription: Customer called with a general inquiry.') => {
      // Generate a more robust unique ID for demo purposes
-     const newTicketId = `T${Date.now().toString().slice(-6)}-${Math.random().toFixed(0).slice(-3)}`;
+     const newTicketId = `T${Date.now().toString().slice(-6)}-${Math.random().toFixed(3).slice(-3)}`;
      const now = new Date().toISOString();
+
+     let assignedDepartmentAndAgent = 'Unassigned'; // Default assignment
+
+     if (model) {
+         try {
+             // --- Prompt Gemini for Automated Assignment ---
+             const assignmentPrompt = `Analyze the following customer concern and assign it to the most appropriate department and agent from the list provided.
+
+Return ONLY the assigned department and agent in the format: Department: [Department Name], Agent: [Agent Name]. If no specific agent seems appropriate, just return the department (e.g., Department: [Department Name], Agent: Unassigned). If the concern does not fit any department, return Department: Other, Agent: Unassigned.
+
+Customer Concern:
+"${initialConcern}"
+
+Available Departments and Agents:
+${formattedDepartments}
+`;
+
+             console.log('Calling Gemini API for assignment with prompt:', assignmentPrompt);
+
+             const result = await model.generateContent(assignmentPrompt);
+             const response = await result.response;
+             const assignmentText = response.text().trim();
+
+             console.log('--- Gemini Assignment Response ---');
+             console.log(assignmentText);
+             console.log('---------------------------------');
+
+             // Basic parsing of the assignment text (expecting "Department: ..., Agent: ...")
+             const departmentMatch = assignmentText.match(/Department:\s*(.*?),\s*Agent:\s*(.*)/i);
+
+             if (departmentMatch && departmentMatch[1] && departmentMatch[2]) {
+                 const department = departmentMatch[1].trim();
+                 const agent = departmentMatch[2].trim();
+                  assignedDepartmentAndAgent = `${department}${agent && agent.toLowerCase() !== 'unassigned' ? ' - ' + agent : ''}`;
+
+                  // Optional: Validate if the assigned department/agent exists in your hardcoded data
+                  const foundDept = hardcodedDepartments.find(d => d.name.toLowerCase() === department.toLowerCase());
+                   if (!foundDept) {
+                       console.warn(`Gemini assigned a department not in hardcoded list: ${department}`);
+                        // Fallback or handle unknown department
+                        assignedDepartmentAndAgent = `Other - ${agent}`;
+                   } else if (agent.toLowerCase() !== 'unassigned' && !foundDept.agents.some(a => a.toLowerCase() === agent.toLowerCase())) {
+                        console.warn(`Gemini assigned an agent not in ${department} department: ${agent}`);
+                         // Fallback or handle unknown agent in department
+                         assignedDepartmentAndAgent = `${foundDept.name} - Unassigned`; // Use validated department name
+                   }
+
+
+             } else {
+                 console.warn('Could not parse assignment from Gemini response:', assignmentText);
+                  assignedDepartmentAndAgent = 'Assignment Failed'; // Indicate assignment failure
+             }
+
+         } catch (error: any) {
+             console.error('Error during AI assignment:', error);
+              assignedDepartmentAndAgent = 'Assignment Error'; // Indicate assignment error
+         }
+     } else {
+          console.warn('AI model not available for assignment.');
+     }
+
 
      const simulatedNewTicket: Ticket = {
          id: newTicketId,
-         subject: 'New Automated Ticket: Customer Inquiry', // Hardcoded subject
+         subject: 'Automated Ticket: ' + initialConcern.substring(0, 50) + (initialConcern.length > 50 ? '...' : ''), // Use part of concern for subject
          status: 'New', // Starts as New
          priority: 'Medium', // Default priority
-         assignedTo: null, // Unassigned initially
+         assignedTo: assignedDepartmentAndAgent, // Use the AI-determined assignment
          channel: 'Phone', // Simulated phone call channel
          createdAt: now,
          updatedAt: now,
          lastMessageAt: now,
-         description: 'Automated transcription: Customer called with a general inquiry.', // Hardcoded description
-         conversation: [{ sender: 'Customer', text: 'Hello, I have a question about my service.', timestamp: now }], // Initial message
+         description: initialConcern, // Use the initial concern text as description
+         conversation: [{ sender: 'Customer', text: initialConcern, timestamp: now }], // Initial customer message
          publicNotes: '',
-         privateNotes: 'Ticket created automatically by AI after call.',
+         privateNotes: `Ticket created automatically by AI after call. Initial Assignment: ${assignedDepartmentAndAgent}`,
      };
 
      setTickets(prevTickets => [...prevTickets, simulatedNewTicket]);
      console.log('Simulating adding new ticket:', simulatedNewTicket);
-     alert(`New ticket ${newTicketId} automatically created!`); // Notify the agent
+     alert(`New ticket ${newTicketId} automatically created! Assigned to: ${assignedDepartmentAndAgent}`); // Notify the agent
 };
 
 
@@ -303,17 +375,23 @@ export default function TicketManagementPage() {
      setCallSimulationPhase('ringing');
      console.log('Simulating incoming call...');
 
+     // Sample initial customer concern for the automated ticket
+      const sampleInitialConcern = "I have a problem with my app crashing every time I try to open the settings."; // Example tech issue
+      // const sampleInitialConcern = "My last invoice seems incorrect, I was charged more than expected."; // Example billing issue
+      // const sampleInitialConcern = "I'd like to suggest a new feature for exporting data."; // Example feature request
+
      // Timer for "ringing" phase (3 seconds)
      callTimerRef.current = setTimeout(() => {
          setCallSimulationPhase('ai_answering');
          console.log('AI is now answering...');
 
          // Timer for "AI answering" phase (5 seconds)
-         callTimerRef.current = setTimeout(() => {
+         callTimerRef.current = setTimeout(async () => { // Make this async to await ticket creation
              setShowIncomingCallPopup(false); // Close popup
              setCallSimulationPhase(null); // Reset phase
-             console.log('Call simulation ended, creating ticket...');
-             addNewHardcodedTicket(setTickets); // Add the hardcoded ticket
+             console.log('Call simulation ended, creating ticket with AI assignment...');
+             // Call the modified addNewHardcodedTicket with the model and initial concern
+             await addNewHardcodedTicket(setTickets, model, sampleInitialConcern);
          }, 5000); // AI answering duration
 
      }, 3000); // Ringing duration
@@ -1096,7 +1174,7 @@ ${formattedKB}
       )}
        {/* --- End Manual Ticket Creation Modal --- */}
 
-       {/* Incoming Call Simulation Popup */}
+       {/* ADDED: Incoming Call Simulation Popup */}
         {showIncomingCallPopup && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                 <div className="bg-white p-6 rounded-lg shadow-lg text-center">
@@ -1307,172 +1385,172 @@ ${formattedKB}
                                       )}
                                  </div>
                             </section>
-                        </div> {/* End Second Column */}
+                        </div> {/* End First Column */}
 
-                        {/* Original Second Column (now Third): Knowledge Base Suggestions */}
-                        <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
-                             <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
-                                <h2 className="text-xl font-semibold text-blue-700 mb-4">Knowledge Base Suggestions</h2>
-                                 <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow"> {/* Changed max-h to h-full and added flex-grow */}
-                                     {suggestedKB.length > 0 && suggestedKB[0].id === 'KB-None' ? (
-                                          <p className="text-gray-600 italic">{suggestedKB[0].title}</p>
-                                     ) : suggestedKB.length > 0 ? (
-                                         <ul className="w-full">
-                                             {suggestedKB.map(kb => (
-                                                 <li key={kb.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 w-full">
-                                                     <p className="font-semibold text-blue-700">{kb.title}</p>
-                                                      <p className="text-sm text-gray-600 italic">{kb.content}</p>
-                                                 </li>
-                                             ))}
-                                         </ul>
-                                     ) : (
-                                         'Relevant KB articles will appear here after processing.'
-                                     )}
-                                 </div>
-                            </section>
-                        </div> {/* End Third Column */}
-
-                        {/* Original Third Column (now Fourth): Response Suggestions */}
-                        <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
-                            <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
-                                <h2 className="text-xl font-semibold text-blue-700 mb-4">Response Suggestions</h2>
-                                 <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow"> {/* Set height to full and flex-grow */}
-                                     {suggestedReplies.length > 0 ? (
-                                         <ul className="list-disc pl-5 w-full">
-                                             {suggestedReplies.map((reply, index) => (
-                                                 <li
-                                                     key={index}
-                                                     className="mb-2 cursor-pointer text-blue-700 hover:underline w-full"
-                                                     onClick={() => handleSuggestionClick(reply)}
-                                                 >
-                                                     {reply}
-                                                 </li>
-                                             ))}
-                                         </ul>
-                                     ) : (
-                                         'AI-generated response suggestions will appear here after processing the ticket.'
-                                     )}
-                                 </div>
-                            </section>
-                        </div> {/* End Fourth Column */}
-
-                        {/* Original Fourth Column (now Fifth): Compose Reply */}
-                         <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
+                    {/* Second Column: Knowledge Base Suggestions */}
+                    <div className="flex flex-col gap-6 w-full lg:col-span-1">
                          <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
-                            <h2 className="text-xl font-semibold text-blue-700 mb-4">Compose Reply</h2>
-                             <textarea
-                                className="w-full h-11/14 p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                                placeholder="Compose your final reply here..."
-                                value={composeReply}
-                                onChange={(e) => setComposeReply(e.target.value)}
-                             ></textarea>
-                             <div className="flex justify-end space-x-4 mt-4 w-full">
-                                 <button
-                                     onClick={handleClearCompose}
-                                     className="flex items-center bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
-                                 >
-                                     <Eraser className="w-4 h-4 mr-1" /> Clear
-                                 </button>
-                                 <button
-                                     onClick={handleSendAgentReply} // MODIFIED: Use the new send handler
-                                      className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                      disabled={!composeReply.trim() || !selectedTicket} // Disable if empty or no ticket selected
+                            <h2 className="text-xl font-semibold text-blue-700 mb-4">Knowledge Base Suggestions</h2>
+                             <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow">
+                                 {suggestedKB.length > 0 && suggestedKB[0].id === 'KB-None' ? (
+                                      <p className="text-gray-600 italic">{suggestedKB[0].title}</p>
+                                 ) : suggestedKB.length > 0 ? (
+                                     <ul className="w-full">
+                                         {suggestedKB.map(kb => (
+                                             <li key={kb.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 w-full">
+                                                 <p className="font-semibold text-blue-700">{kb.title}</p>
+                                                  <p className="text-sm text-gray-600 italic">{kb.content}</p>
+                                             </li>
+                                         ))}
+                                     </ul>
+                                 ) : (
+                                     'Relevant KB articles will appear here after processing.'
+                                 )}
+                             </div>
+                        </section>
+                    </div> {/* End Second Column */}
+
+                    {/* Third Column: Response Suggestions */}
+                    <div className="flex flex-col gap-6 w-full lg:col-span-1">
+                        <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
+                            <h2 className="text-xl font-semibold text-blue-700 mb-4">Response Suggestions</h2>
+                             <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow">
+                                 {suggestedReplies.length > 0 ? (
+                                     <ul className="list-disc pl-5 w-full">
+                                         {suggestedReplies.map((reply, index) => (
+                                             <li
+                                                 key={index}
+                                                 className="mb-2 cursor-pointer text-blue-700 hover:underline w-full"
+                                                 onClick={() => handleSuggestionClick(reply)}
+                                             >
+                                                 {reply}
+                                             </li>
+                                         ))}
+                                     </ul>
+                                 ) : (
+                                     'AI-generated response suggestions will appear here after processing the ticket.'
+                                 )}
+                             </div>
+                        </section>
+                    </div> {/* End Third Column */}
+
+                    {/* Fourth Column: Compose Reply */}
+                     <div className="flex flex-col gap-6 w-full lg:col-span-1">
+                     <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
+                        <h2 className="text-xl font-semibold text-blue-700 mb-4">Compose Reply</h2>
+                         <textarea
+                            className="w-full h-11/14 p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                            placeholder="Compose your final reply here..."
+                            value={composeReply}
+                            onChange={(e) => setComposeReply(e.target.value)}
+                         ></textarea>
+                         <div className="flex justify-end space-x-4 mt-4 w-full">
+                             <button
+                                 onClick={handleClearCompose}
+                                 className="flex items-center bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
+                             >
+                                 <Eraser className="w-4 h-4 mr-1" /> Clear
+                             </button>
+                             <button
+                                 onClick={handleSendAgentReply} // MODIFIED: Use the new send handler
+                                  className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                  disabled={!composeReply.trim() || !selectedTicket} // Disable if empty or no ticket selected
                                  >
                                      <Send className="w-4 h-4 mr-1" /> Send Reply
                                  </button>
                              </div>
-                        </section>
-                        </div> {/* End Fifth Column */}
+                         </section>
+                         </div> {/* End Fourth Column */}
 
-                    </main>
-                    {/* --- End AI Processing Area + Conversation --- */}
-
-
-                   {/* Interaction History Section (Keep this separate from the main conversation chat) */}
-                   <div className="mb-6">
-                       <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Interaction History (Emails, Call Logs, etc.)</h3>
-                       <div className="bg-gray-50 p-3 rounded-md max-h-40 overflow-y-auto"> {/* Added max-height and overflow */}
-                           {hardcodedInteractionHistory.length > 0 ? (
-                               <ul>
-                                   {hardcodedInteractionHistory.map(interaction => (
-                                       <li key={interaction.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 text-sm text-gray-700">
-                                           <span className="font-semibold">{interaction.type}:</span> {interaction.summary}
-                                           <p className="text-xs text-gray-500 mt-1">{formatHistoryDate(interaction.timestamp)}</p> {/* Display formatted date */}
-                                       </li>
-                                   ))}
-                               </ul>
-                           ) : (
-                               <div className="text-center text-gray-500 italic">No interaction history available.</div>
-                           )}
-                       </div>
-                   </div>
-                   {/* END MODIFIED: Interaction History Section */}
+                     </main>
+                     {/* --- End AI Processing Area + Conversation --- */}
 
 
-                   {/* MODIFIED: Notes Section */}
-                   <div className="mb-6">
-                       <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Notes</h3>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           {/* Public Notes Textarea */}
-                           <div className="bg-gray-50 p-3 rounded-md">
-                               <p className="text-sm font-semibold text-gray-600 mb-2">Public Notes:</p>
-                               <textarea
-                                    className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                                    placeholder="Add public notes here..."
-                                    value={publicNotes}
-                                    onChange={(e) => setPublicNotes(e.target.value)}
-                               ></textarea>
-                           </div>
-                           {/* Private Notes Textarea */}
-                            <div className="bg-gray-50 p-3 rounded-md">
-                               <p className="text-sm font-semibold text-gray-600 mb-2">Private Notes:</p>
-                               <textarea
-                                    className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
-                                    placeholder="Add private notes here..."
-                                    value={privateNotes}
-                                    onChange={(e) => setPrivateNotes(e.target.value)}
-                               ></textarea>
-                           </div>
-                       </div>
-                       {/* Conceptual Save Notes Button */}
-                        <div className="flex justify-end mt-4">
-                            <button
-                                onClick={() => {
-                                    // TODO: Implement saving notes to state/backend
-                                    console.log("Simulating saving notes:", { publicNotes, privateNotes });
-                                    alert("Notes saved (simulated)!");
-                                    // In a real app, you'd update the ticket object in your state/database
-                                    // For this demo, you might update the selectedTicket object locally
-                                }}
-                                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
-                            >
-                                Save Notes
-                            </button>
+                    {/* Interaction History Section (Keep this separate from the main conversation chat) */}
+                    <div className="mb-6">
+                        <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Interaction History (Emails, Call Logs, etc.)</h3>
+                        <div className="bg-gray-50 p-3 rounded-md max-h-40 overflow-y-auto"> {/* Added max-height and overflow */}
+                            {hardcodedInteractionHistory.length > 0 ? (
+                                <ul>
+                                    {hardcodedInteractionHistory.map(interaction => (
+                                        <li key={interaction.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 text-sm text-gray-700">
+                                            <span className="font-semibold">{interaction.type}:</span> {interaction.summary}
+                                            <p className="text-xs text-gray-500 mt-1">{formatHistoryDate(interaction.timestamp)}</p> {/* Display formatted date */}
+                                        </li>
+                                    ))}
+                                </ul>
+                            ) : (
+                                <div className="text-center text-gray-500 italic">No interaction history available.</div>
+                            )}
                         </div>
-                   </div>
-                   {/* END MODIFIED: Notes Section */}
-
-
-                   {/* TODO: Add buttons for actions like Reply, Merge, Escalate, Close, etc. within the modal */}
-                    <div className="flex justify-end space-x-4 mt-6">
-                         <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-                             Reply (Simulated)
-                         </button>
-                          <button className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
-                             Close Ticket (Simulated)
-                         </button>
-                         {/* More action buttons here */}
                     </div>
-
-               </div>
-           </div>
-       )}
-       {/* --- End Detailed Ticket View Modal --- */}
+                    {/* END MODIFIED: Interaction History Section */}
 
 
-       {/* TODO: Implement other features like Merging, SLA visual indicators, Escalation UI */}
+                    {/* MODIFIED: Notes Section */}
+                    <div className="mb-6">
+                        <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Notes</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Public Notes Textarea */}
+                            <div className="bg-gray-50 p-3 rounded-md">
+                                <p className="text-sm font-semibold text-gray-600 mb-2">Public Notes:</p>
+                                <textarea
+                                     className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                                     placeholder="Add public notes here..."
+                                     value={publicNotes}
+                                     onChange={(e) => setPublicNotes(e.target.value)}
+                                ></textarea>
+                            </div>
+                            {/* Private Notes Textarea */}
+                             <div className="bg-gray-50 p-3 rounded-md">
+                                <p className="text-sm font-semibold text-gray-600 mb-2">Private Notes:</p>
+                                <textarea
+                                     className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                                     placeholder="Add private notes here..."
+                                     value={privateNotes}
+                                     onChange={(e) => setPrivateNotes(e.target.value)}
+                                ></textarea>
+                            </div>
+                        </div>
+                        {/* Conceptual Save Notes Button */}
+                         <div className="flex justify-end mt-4">
+                             <button
+                                 onClick={() => {
+                                     // TODO: Implement saving notes to state/backend
+                                     console.log("Simulating saving notes:", { publicNotes, privateNotes });
+                                     alert("Notes saved (simulated)!");
+                                     // In a real app, you'd update the ticket object in your state/database
+                                     // For this demo, you might update the selectedTicket object locally
+                                 }}
+                                 className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
+                             >
+                                 Save Notes
+                             </button>
+                         </div>
+                    </div>
+                    {/* END MODIFIED: Notes Section */}
 
 
-    </div>
+                    {/* TODO: Add buttons for actions like Reply, Merge, Escalate, Close, etc. within the modal */}
+                     <div className="flex justify-end space-x-4 mt-6">
+                          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+                              Reply (Simulated)
+                          </button>
+                           <button className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
+                              Close Ticket (Simulated)
+                          </button>
+                          {/* More action buttons here */}
+                     </div>
+
+                </div>
+            </div>
+        )}
+        {/* --- End Detailed Ticket View Modal --- */}
+
+
+        {/* TODO: Implement other features like Merging, SLA visual indicators, Escalation UI */}
+
+
+     </div>
   );
 }
