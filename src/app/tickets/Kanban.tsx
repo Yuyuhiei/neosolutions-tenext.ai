@@ -1,9 +1,9 @@
-// src/app/tickets/Kanban.tsx (This file now contains the Kanban and the AI Processing Modal)
+// src/app/tickets/Kanban.tsx (This file contains the Kanban, AI Processing Modal, and Related Concerns below the Kanban board, always visible with default content)
 
 'use client'; // This page uses client-side state and interactions
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'; // Import hooks
-import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge)
+import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge, ArrowDownRight } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge, ArrowDownRight)
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'; // Import Gemini library
 import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData'; // Import hardcoded data
 
@@ -13,7 +13,7 @@ import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedDa
 // Gemini calls should be made from your secure backend.
 // For this combined modal view, keeping it client-side as before, but the warning remains.
 // Replace with your actual API key or load from environment variables securely on the backend.
-const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM";
+const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM"; // Replace with your actual API key
 
 if (!apiKey) {
     console.error("NEXT_PUBLIC_GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
@@ -64,12 +64,14 @@ interface Message {
     timestamp: string; // ISO date string
 }
 
+// MODIFIED: Added 'department' field to the Ticket interface
 interface Ticket {
   id: string;
   subject: string;
   status: 'New' | 'Open' | 'In Progress' | 'Pending' | 'Resolved' | 'Closed';
   priority: 'Low' | 'Medium' | 'High' | 'Urgent';
   assignedTo: string | null;
+  department: string; // ADDED: Department field
   channel: 'Phone' | 'Email' | 'Chat' | 'Web Form' | 'Social Media' | 'Other';
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
@@ -98,13 +100,37 @@ const formatHistoryDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
 };
 
+// Helper function to extract department from assignedTo string (e.g., "Technical Support - Agent A")
+const getDepartmentFromAssignment = (assignedTo: string | null): string => {
+    if (!assignedTo) return 'Unassigned';
+    const parts = assignedTo.split(' - ');
+    return parts[0].trim() || 'Unassigned';
+};
+
+// ADDED: Simple helper to check for keyword similarity (can be made more sophisticated)
+const isTicketRelated = (ticket1: Ticket, ticket2: Ticket): boolean => {
+    // A simple check: if subjects contain similar keywords (case-insensitive)
+    // In a real application, you'd use more advanced text similarity or tagging.
+    if (!ticket1.subject || !ticket2.subject) return false;
+
+    const subject1 = ticket1.subject.toLowerCase();
+    const subject2 = ticket2.subject.toLowerCase();
+
+    // Check for overlap of significant terms
+    const significantTerms = ['login', 'account', 'access', 'password', 'issue', 'problem', 'cannot', 'can\'t']; // Add more relevant terms
+     return significantTerms.some(term => subject1.includes(term) && subject2.includes(term));
+};
+
+
+// MODIFIED: Added 'department' field to initialTickets data
 const initialTickets: Ticket[] = [
   {
     id: 'T001',
     subject: 'Cannot log in to account',
     status: 'Open',
     priority: 'Urgent',
-    assignedTo: 'Agent A',
+    assignedTo: 'Technical Support - Agent A',
+    department: 'Technical Support', // ADDED
     channel: 'Web Form',
     createdAt: '2023-10-26T10:00:00Z',
     updatedAt: '2023-10-26T10:30:00Z',
@@ -125,7 +151,8 @@ const initialTickets: Ticket[] = [
     subject: 'Question about billing cycle',
     status: 'New',
     priority: 'Medium',
-    assignedTo: null,
+    assignedTo: 'Billing - Agent B',
+    department: 'Billing', // ADDED
     channel: 'Email',
     createdAt: '2023-10-26T11:15:00Z',
     updatedAt: '2023-10-26T11:15:00Z',
@@ -144,7 +171,8 @@ const initialTickets: Ticket[] = [
     subject: 'Product feature request',
     status: 'Open',
     priority: 'Low',
-    assignedTo: 'Agent B',
+    assignedTo: 'Product Team - Agent C',
+    department: 'Product Team', // ADDED
     channel: 'Chat',
     createdAt: '2023-10-26T09:30:00Z',
     updatedAt: '2023-10-26T14:00:00Z',
@@ -161,7 +189,8 @@ const initialTickets: Ticket[] = [
     subject: 'Complaint about service',
     status: 'Pending',
     priority: 'High',
-    assignedTo: 'Agent A',
+    assignedTo: 'Technical Support - Agent A',
+     department: 'Technical Support', // ADDED
     channel: 'Phone', // Simulating a phone ticket received as hardcoded text initially
     createdAt: '2023-10-25T16:00:00Z',
     updatedAt: '2023-10-26T09:00:00Z',
@@ -175,10 +204,11 @@ const initialTickets: Ticket[] = [
   },
    {
     id: 'T005',
-    subject: 'Follow up on T001',
+    subject: 'Follow up on T001 - Still cannot log in', // MODIFIED Subject for relatedness
     status: 'New', // Simulating a follow-up coming in as new
     priority: 'Urgent', // Duplicates of high priority are urgent
-    assignedTo: null,
+    assignedTo: 'Technical Support - Agent D', // Assigned to a different agent in the same department
+    department: 'Technical Support', // ADDED
     channel: 'Email',
     createdAt: '2023-10-26T15:00:00Z',
     updatedAt: '2023-10-26T15:00:00Z',
@@ -195,7 +225,8 @@ const initialTickets: Ticket[] = [
     subject: 'Issue with payment processing',
     status: 'In Progress',
     priority: 'High',
-    assignedTo: 'Agent C',
+    assignedTo: 'Billing - Agent E',
+    department: 'Billing', // ADDED
     channel: 'Chat',
     createdAt: '2023-10-26T12:00:00Z',
     updatedAt: '2023-10-26T13:00:00Z',
@@ -212,7 +243,8 @@ const initialTickets: Ticket[] = [
     subject: 'Request for refund status',
     status: 'Resolved',
     priority: 'Medium',
-    assignedTo: 'Agent B',
+    assignedTo: 'Billing - Agent B',
+    department: 'Billing', // ADDED
     channel: 'Email',
     createdAt: '2025-05-16T10:00:00Z', // Updated date for testing
     updatedAt: '2025-05-17T11:00:00Z', // Updated date for testing
@@ -224,6 +256,61 @@ const initialTickets: Ticket[] = [
     slaStatus: 'Within SLA', // ADDED Sample SLA Status
     escalationLevel: 'None', // ADDED Sample Escalation Level
   },
+    // ADDED: More tickets related to login issues for demonstration
+    {
+        id: 'T008',
+        subject: 'Cannot access my account after password reset',
+        status: 'New',
+        priority: 'High',
+        assignedTo: 'Technical Support - Agent A',
+        department: 'Technical Support', // ADDED
+        channel: 'Web Form',
+        createdAt: '2023-10-27T09:00:00Z',
+        updatedAt: '2023-10-27T09:00:00Z',
+        lastMessageAt: '2023-10-27T09:00:00Z',
+        description: 'After resetting my password, I am still unable to log in. Getting an invalid credentials error.',
+        conversation: [],
+        publicNotes: '',
+        privateNotes: '',
+        slaStatus: 'Within SLA',
+        escalationLevel: 'None',
+    },
+     {
+        id: 'T009',
+        subject: 'Login failed repeatedly',
+        status: 'Open',
+        priority: 'Urgent',
+        assignedTo: 'Technical Support - Agent D',
+        department: 'Technical Support', // ADDED
+        channel: 'Chat',
+        createdAt: '2023-10-27T10:30:00Z',
+        updatedAt: '2023-10-27T11:00:00Z',
+        lastMessageAt: '2023-10-27T11:00:00Z',
+        description: 'My account seems locked after multiple failed login attempts. Please unlock it.',
+        conversation: [],
+        publicNotes: 'Account lockout suspected.',
+        privateNotes: 'Check user account status in admin panel.',
+        slaStatus: 'Approaching SLA',
+        escalationLevel: 'None',
+    },
+     {
+        id: 'T010',
+        subject: 'Cannot log in on mobile app',
+        status: 'New',
+        priority: 'Medium',
+        assignedTo: 'Mobile Support - Agent F', // Assigned to a different department
+        department: 'Mobile Support', // ADDED
+        channel: 'Email',
+        createdAt: '2023-10-27T11:00:00Z',
+        updatedAt: '2023-10-27T11:00:00Z',
+        lastMessageAt: '2023-10-27T11:00:00Z',
+        description: 'The mobile application is not allowing me to log in, but the website works fine.',
+        conversation: [],
+        publicNotes: '',
+        privateNotes: 'Check app version and user device details.',
+        slaStatus: 'Within SLA',
+        escalationLevel: 'None',
+    },
 ];
 // --- End Hardcoded Data ---
 
@@ -240,9 +327,9 @@ const statusColors: Record<Ticket['status'], string> = {
 // --- Helper for Priority Colors (Tailwind classes) ---
 const priorityColors: Record<Ticket['priority'], string> = {
   'Low': 'text-green-600 font-medium',
-  'Medium': 'text-yellow-600 font-medium',
-  'High': 'text-orange-600 font-semibold',
-  'Urgent': 'text-red-600 font-bold',
+  'Medium': 'text-yellow-600 font-semibold', // Changed Medium to semibold for better distinction
+  'High': 'text-orange-600 font-bold', // Changed High to bold
+  'Urgent': 'text-red-600 font-extrabold', // Changed Urgent to extrabold
 };
 
 // ADDED: Helper for SLA Colors (Tailwind classes)
@@ -264,12 +351,12 @@ const addNewHardcodedTicket = async (setTickets: React.Dispatch<React.SetStateAc
      const now = new Date().toISOString();
 
      let assignedDepartmentAndAgent = 'Unassigned'; // Default assignment
+     let assignedDepartment = 'Unassigned'; // Default department
 
      if (model) {
          try {
              // --- Prompt Gemini for Automated Assignment ---
              const assignmentPrompt = `Analyze the following customer concern and assign it to the most appropriate department and agent from the list provided.
-
 Return ONLY the assigned department and agent in the format: Department: [Department Name], Agent: [Agent Name]. If no specific agent seems appropriate, just return the department (e.g., Department: [Department Name], Agent: Unassigned). If the concern does not fit any department, return Department: Other, Agent: Unassigned.
 
 Customer Concern:
@@ -295,13 +382,15 @@ ${formattedDepartments}
              if (departmentMatch && departmentMatch[1] && departmentMatch[2]) {
                  const department = departmentMatch[1].trim();
                  const agent = departmentMatch[2].trim();
-                  assignedDepartmentAndAgent = `${department}${agent && agent.toLowerCase() !== 'unassigned' ? ' - ' + agent : ''}`;
+                 assignedDepartment = department; // Set the assigned department
+                 assignedDepartmentAndAgent = `${department}${agent && agent.toLowerCase() !== 'unassigned' ? ' - ' + agent : ''}`;
 
                   // Optional: Validate if the assigned department/agent exists in your hardcoded data
                   const foundDept = hardcodedDepartments.find(d => d.name.toLowerCase() === department.toLowerCase());
                    if (!foundDept) {
                        console.warn(`Gemini assigned a department not in hardcoded list: ${department}`);
                         // Fallback or handle unknown department
+                         assignedDepartment = 'Other'; // Fallback department
                         assignedDepartmentAndAgent = `Other - ${agent}`;
                    } else if (agent.toLowerCase() !== 'unassigned' && !foundDept.agents.some(a => a.toLowerCase() === agent.toLowerCase())) {
                         console.warn(`Gemini assigned an agent not in ${department} department: ${agent}`);
@@ -313,11 +402,13 @@ ${formattedDepartments}
              } else {
                  console.warn('Could not parse assignment from Gemini response:', assignmentText);
                   assignedDepartmentAndAgent = 'Assignment Failed'; // Indicate assignment failure
+                   assignedDepartment = 'Unassigned'; // Indicate assignment failure
              }
 
          } catch (error: any) {
              console.error('Error during AI assignment:', error);
               assignedDepartmentAndAgent = 'Assignment Error'; // Indicate assignment error
+               assignedDepartment = 'Unassigned'; // Indicate assignment error
          }
      } else {
           console.warn('AI model not available for assignment.');
@@ -330,6 +421,7 @@ ${formattedDepartments}
          status: 'New', // Starts as New
          priority: 'Medium', // Default priority
          assignedTo: assignedDepartmentAndAgent, // Use the AI-determined assignment
+         department: assignedDepartment, // ADDED: Set the assigned department
          channel: 'Phone', // Simulated phone call channel
          createdAt: now,
          updatedAt: now,
@@ -398,6 +490,12 @@ export default function TicketManagementPage() {
 
   // Use useRef to hold the SpeechRecognition instance (Moved from page.tsx)
   const recognitionRef = useRef<any | null>(null);
+
+    // --- State for Related Concerns ---
+    const [selectedRelatedTicketIds, setSelectedRelatedTicketIds] = useState<string[]>([]);
+    const [isSendingBulkReply, setIsSendingBulkReply] = useState(false);
+    const [bulkReplyStatus, setBulkReplyStatus] = useState<string | null>(null);
+
 
   // ADDED: Handle simulating an incoming call
  const handleSimulateIncomingCall = () => {
@@ -520,8 +618,11 @@ export default function TicketManagementPage() {
 
           recognitionRef.current.onend = () => {
               console.log('Speech recognition ended.');
-              setIsRecording(false);
               setInterimTranscript(''); // Clear any leftover interim transcript
+               // Only set isRecording to false if it wasn't stopped by an error
+               if (isRecording) {
+                   setIsRecording(false);
+               }
           };
 
           setIsSTTReady(true);
@@ -562,6 +663,10 @@ export default function TicketManagementPage() {
             if (isRecording && recognitionRef.current) {
                 recognitionRef.current.stop();
             }
+             // Clear selected related tickets when a new main ticket is selected
+            setSelectedRelatedTicketIds([]); // ADDED: Clear selected related tickets
+            setBulkReplyStatus(null); // ADDED: Clear bulk reply status message
+
         } else {
              // When modal closes, clear AI state, notes state, and conversation state
             setClientConcern('');
@@ -577,6 +682,9 @@ export default function TicketManagementPage() {
              if (isRecording && recognitionRef.current) {
                 recognitionRef.current.stop();
             }
+             // Clear selected related tickets when modal closes
+            setSelectedRelatedTicketIds([]); // ADDED: Clear selected related tickets
+            setBulkReplyStatus(null); // ADDED: Clear bulk reply status message
         }
     }, [selectedTicket]); // Rerun this effect when selectedTicket changes
 
@@ -592,15 +700,18 @@ export default function TicketManagementPage() {
     setSortOrder(order);
   };
 
+  // MODIFIED: handleTicketClick to also set selectedTicketId for the modal
   const handleTicketClick = (ticketId: string) => {
-    // Set the selected ticket ID and open the modal
-    setSelectedTicketId(ticketId);
+      console.log("Ticket clicked:", ticketId); // ADDED: Console log to verify click
+      // Set the selected ticket ID to open the modal AND trigger related concerns section
+      setSelectedTicketId(ticketId);
   };
+
 
   const handleDetailedViewClose = () => {
       // Close the modal by clearing the selected ticket ID
       setSelectedTicketId(null);
-       // The useEffect for selectedTicket handles clearing AI state
+       // The useEffect for selectedTicket handles clearing AI state and related concerns state
   };
 
 
@@ -614,10 +725,12 @@ export default function TicketManagementPage() {
 
    const handleAssignChange = (ticketId: string, newAssignee: string | null) => {
       // TODO: Replace with backend API call to update assignment in Supabase
+      // Also update the department field based on the new assignee
+      const newDepartment = getDepartmentFromAssignment(newAssignee); // Get department from new assignee
       setTickets(tickets.map(ticket =>
-          ticket.id === ticketId ? { ...ticket, assignedTo: newAssignee, updatedAt: new Date().toISOString() } : ticket
+          ticket.id === ticketId ? { ...ticket, assignedTo: newAssignee, department: newDepartment, updatedAt: new Date().toISOString() } : ticket // MODIFIED: Update department
       ));
-      console.log(`Simulating assignment change for ${ticketId} to ${newAssignee}`);
+      console.log(`Simulating assignment change for ${ticketId} to ${newAssignee}. Department updated to ${newDepartment}`);
    };
 
 
@@ -638,12 +751,17 @@ export default function TicketManagementPage() {
        const newTicketId = `T${(tickets.length + 1).toString().padStart(3, '0')}`;
        const now = new Date().toISOString();
 
+        // Determine department for manually created ticket (e.g., based on a dropdown or default)
+        // For this demo, we'll set it to 'Unassigned' or you could add a department select to the form
+       const manualDepartment = 'Unassigned'; // Or add a select input to the form
+
        const brandNewTicket: Ticket = {
            id: newTicketId,
            subject: newTicketFormData.subject || 'No Subject',
            status: 'New', // Manually created tickets start as New
            priority: 'Medium', // Default priority for manual tickets
            assignedTo: null, // No assignment by default
+           department: manualDepartment, // ADDED: Set department for manual ticket
            channel: (newTicketFormData.channel || 'Other') as Ticket['channel'], // Use selected channel or 'Other'
            createdAt: now,
            updatedAt: now,
@@ -895,16 +1013,6 @@ ${formattedKB}
                  currentKBTitles = ['None found.'];
              }
 
-            console.log('--- Parsed Summary ---');
-            console.log(currentSummary);
-            console.log('----------------------');
-            console.log('--- Parsed Replies ---');
-            console.log(currentReplies);
-            console.log('----------------------');
-             console.log('--- Parsed KB Titles ---');
-            console.log(currentKBTitles);
-            console.log('------------------------');
-
 
             // --- Find the full KB objects for the relevant titles ---
             const relevantKBObjects = hardcodedKnowledgeBase?.filter(article =>
@@ -1020,6 +1128,126 @@ ${formattedKB}
         setComposeReply(suggestion);
     };
 
+    // --- Related Concerns Logic ---
+    // Handle checkbox change for selecting related tickets
+    const handleRelatedCheckboxChange = (ticketId: string, isChecked: boolean) => {
+        setSelectedRelatedTicketIds(prevIds =>
+            isChecked ? [...prevIds, ticketId] : prevIds.filter(id => id !== ticketId)
+        );
+    };
+
+    // Handle sending bulk tailored response (simulated)
+    const handleSendBulkTailoredResponse = async () => {
+        if (selectedRelatedTicketIds.length === 0) {
+            alert('Please select at least one related ticket to send a tailored response.');
+            return;
+        }
+
+        if (!model) {
+             alert('AI model is not configured. Cannot send tailored responses.');
+             return;
+        }
+
+        setIsSendingBulkReply(true);
+        setBulkReplyStatus(null);
+
+        // In a real application, you would iterate through selectedRelatedTicketIds,
+        // fetch details for each ticket, potentially use Gemini to tailor a response
+        // based on the original ticket's context and the related ticket's context,
+        // and then send the response via your communication channel (email, chat, etc.).
+
+        console.log(`Simulating sending tailored response to ${selectedRelatedTicketIds.length} related tickets.`);
+        console.log("Selected related ticket IDs:", selectedRelatedTicketIds);
+        console.log("Context from original ticket:", selectedTicket?.subject, selectedTicket?.description); // Use optional chaining
+
+        try {
+             // --- Simulate AI tailoring the response ---
+             // For this demo, we'll generate a single tailored response based on the
+             // original ticket's summary/description and mention the related tickets.
+             const relatedTicketSubjects = tickets
+                 .filter(t => selectedRelatedTicketIds.includes(t.id))
+                 .map(t => t.subject || `Ticket ${t.id}`)
+                 .join(', ');
+
+             const tailoringPrompt = `Draft a brief, empathetic, and tailored response that an agent can send to multiple customers with similar concerns. The primary concern is related to: "${selectedTicket?.subject || selectedTicket?.description}". You are sending this reply to customers regarding tickets: ${relatedTicketSubjects}. Acknowledge the similar issue and provide a general update or initial troubleshooting step based on the original ticket's context.
+
+Keep the response concise and professional.`;
+
+             console.log('Calling Gemini API for tailored bulk response draft:', tailoringPrompt);
+
+             const result = await model.generateContent(tailoringPrompt);
+             const response = await result.response;
+             const tailoredReplyText = response.text().trim();
+
+             console.log('--- Gemini Tailored Reply Draft ---');
+             console.log(tailoredReplyText);
+             console.log('-----------------------------------');
+
+             // --- Simulate Sending ---
+             // In a real app, you'd use your CPaaS or email integration here
+             // to send this tailoredReplyText to the customers associated with
+             // the selectedRelatedTicketIds.
+
+             setBulkReplyStatus(`Simulated sending tailored response to ${selectedRelatedTicketIds.length} tickets.`);
+             alert(`Simulated sending tailored response to selected tickets:\n\n${tailoredReplyText}`);
+
+             // Clear selected tickets after simulated sending
+             setSelectedRelatedTicketIds([]);
+
+        } catch (error: any) {
+            console.error('Error simulating bulk tailored response:', error);
+            setBulkReplyStatus(`Error sending bulk response: ${error.message || 'Unknown error'}`);
+            alert(`Error simulating sending bulk response: ${error.message || 'Unknown error'}`);
+        } finally {
+            setIsSendingBulkReply(false);
+        }
+    };
+
+    // Find and group related tickets
+    const relatedTicketsByDepartment = useMemo(() => {
+        // If a ticket is selected, find tickets related to the selected one
+        if (selectedTicket) {
+            const related = tickets.filter(ticket =>
+                // Exclude the selected ticket itself and tickets that are already closed or resolved
+                ticket.id !== selectedTicket.id &&
+                ticket.status !== 'Resolved' &&
+                ticket.status !== 'Closed' &&
+                // Check for relatedness using the helper function
+                isTicketRelated(selectedTicket, ticket)
+            );
+
+            // Group by department
+            const grouped: { [department: string]: Ticket[] } = {};
+            related.forEach(ticket => {
+                const department = getDepartmentFromAssignment(ticket.assignedTo);
+                if (!grouped[department]) {
+                    grouped[department] = [];
+                }
+                grouped[department].push(ticket);
+            });
+
+            return grouped;
+        } else {
+            // If no ticket is selected, return the hardcoded list of login-related tickets
+            const hardcodedRelatedTicketIds = ['T001', 'T008', 'T009', 'T010'];
+            const hardcodedRelatedTickets = tickets.filter(ticket =>
+                hardcodedRelatedTicketIds.includes(ticket.id)
+            );
+
+             // Group the hardcoded tickets by department
+             const grouped: { [department: string]: Ticket[] } = {};
+             hardcodedRelatedTickets.forEach(ticket => {
+                 const department = getDepartmentFromAssignment(ticket.assignedTo);
+                 if (!grouped[department]) {
+                     grouped[department] = [];
+                 }
+                 grouped[department].push(ticket);
+             });
+
+             return grouped;
+        }
+    }, [selectedTicket, tickets]); // Recompute when selectedTicket or tickets change
+
 
   // --- Filtered and Sorted Tickets (Applied per status column) ---
   const filteredTickets = useMemo(() => {
@@ -1121,79 +1349,74 @@ ${formattedKB}
 
               {/* Map over statuses to create columns */}
               {kanbanStatuses.map(status => (
-                  <div key={status} className="w-80 flex-shrink-0 bg-white rounded-lg shadow-md p-4 flex flex-col"> {/* Fixed width column */}
-                      {/* Column Header */}
-                      <h2 className={`text-lg font-semibold mb-4 pb-2 text-black border-b ${statusColors[status].replace('bg-', 'border-').replace('text-', '')}`}> {/* Dynamic border color */}
-                          {status} ({filteredTickets.filter(ticket => ticket.status === status).length}) {/* Count tickets in this status */}
-                      </h2>
+                <div key={status} className="w-80 flex-shrink-0 bg-white rounded-lg shadow-md p-4 flex flex-col"> {/* Fixed width column */}
+                    {/* Column Header */}
+                    <h2 className={`text-lg font-semibold mb-4 pb-2 text-black border-b ${statusColors[status].replace('bg-', 'border-').replace('text-', '')}`}> {/* Dynamic border color */}
+                        {status} ({filteredTickets.filter(ticket => ticket.status === status).length}) {/* Count tickets in this status */}
+                    </h2>
 
-                      {/* Tickets in this column (Sorted) */}
-                      <div className="flex-grow space-y-4 overflow-y-hidden max-h-[calc(100vh-250px)]"> {/* Hide column scrollbar */}
-                          {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).map(ticket => (
-                              // Ticket Card
-                              <div
-                                  key={ticket.id}
-                                  className="bg-blue-50 p-4 rounded-lg shadow-sm border border-blue-100 hover:border-blue-300 cursor-pointer"
-                                  onClick={() => handleTicketClick(ticket.id)} // Simulate detail view
-                              >
-                                  <div className="font-semibold text-gray-800 mb-1 truncate">{ticket.subject}</div>
-                                  <div className="text-sm text-gray-600 mb-2">ID: {ticket.id} | Channel: {ticket.channel}</div>
-                                  <div className="text-sm text-gray-600 mb-2">Assigned: {ticket.assignedTo || 'Unassigned'}</div>
-                                   {/* Priority Indicator */}
-                                   <div className={`text-sm ${priorityColors[ticket.priority]} mb-2`}>
-                                      Priority: {ticket.priority}
-                                   </div>
-                                   {/* ADDED: SLA Indicator on card */}
-                                    {ticket.slaStatus && (
-                                        <div className={`text-xs ${slaColors[ticket.slaStatus]} mb-2 flex items-center`}>
-                                            <AlertTriangle className="w-3 h-3 mr-1" /> {ticket.slaStatus}
-                                        </div>
-                                    )}
-                                   {/* END ADDED */}
-                                  <div className="text-xs text-gray-500">Last Update: {new Date(ticket.updatedAt).toLocaleString()}</div>
-
-                                  {/* Action Controls (Simulated) */}
-                                   <div className="mt-3 flex justify-between items-center text-sm">
-                                       {/* Simulate Status Change */}
-                                       <select
-                                           value={ticket.status}
-                                           onChange={(e) => {
-                                                e.stopPropagation(); // Prevent card click
-                                                handleStatusChange(ticket.id, e.target.value as Ticket['status']);
-                                           }}
-                                            onClick={(e) => e.stopPropagation()} // Stop click propagation from select
-                                            className="border rounded px-1 py-0 text-xs text-gray-600 bg-white"
-                                       >
-                                          {Object.keys(statusColors).map(statusOption => (
-                                              <option key={statusOption} value={statusOption}>{statusOption}</option>
-                                          ))}
-                                       </select>
-                                       {/* Simulate Assign Change */}
-                                        <button
-                                           onClick={(e) => {
-                                               e.stopPropagation(); // Prevent card click
-                                               const newAssignee = prompt(`Assign ${ticket.id} to:`, ticket.assignedTo || '');
-                                                if (newAssignee !== null) {
-                                                    handleAssignChange(ticket.id, newAssignee === '' ? null : newAssignee);
-                                               }
-                                           }}
-                                            className="px-2 py-1 text-xs bg-blue-600 rounded hover:bg-gray-600 text-white"
-                                        >
-                                           Assign
-                                        </button>
-                                   </div>
-                                   {/* TODO: Add Merge, Escalate, Delete/Archive buttons on card or in detail view */}
-                              </div>
-                          ))}
-                           {/* Message if no tickets in this column */}
-                            {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).length === 0 && (
-                                <div className="text-center text-gray-500 italic py-4">
-                                    No tickets in this status.
+                    {/* Tickets in this column (Sorted) */}
+                    {/* MODIFIED: Changed overflow-y-hidden to overflow-y-auto */}
+                    <div className="flex-grow space-y-4 overflow-y-auto max-h-[calc(100vh-250px)]"> {/* Added vertical scrollbar when content overflows */}
+                        {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).map(ticket => (
+                            // Ticket Card
+                            <div
+                                key={ticket.id}
+                                className="bg-blue-50 p-4 rounded-lg shadow-sm border border-blue-100 hover:border-blue-300 cursor-pointer"
+                                onClick={() => handleTicketClick(ticket.id)} // Simulate detail view
+                            >
+                                {/* ... (ticket card content) ... */}
+                                <div className="font-semibold text-gray-800 mb-1 truncate">{ticket.subject}</div>
+                                <div className="text-sm text-gray-600 mb-2">ID: {ticket.id} | Channel: {ticket.channel}</div>
+                                <div className="text-sm text-gray-600 mb-2">Department: {ticket.department}</div>
+                                <div className="text-sm text-gray-600 mb-2">Assigned: {ticket.assignedTo || 'Unassigned'}</div>
+                                <div className={`text-sm ${priorityColors[ticket.priority]} mb-2`}>
+                                Priority: {ticket.priority}
                                 </div>
-                            )}
-                      </div>
-                  </div>
-              ))}
+                                {ticket.slaStatus && (
+                                    <div className={`text-xs ${slaColors[ticket.slaStatus]} mb-2 flex items-center`}>
+                                        <AlertTriangle className="w-3 h-3 mr-1" /> {ticket.slaStatus}
+                                    </div>
+                                )}
+                                <div className="text-xs text-gray-500">Last Update: {new Date(ticket.updatedAt).toLocaleString()}</div>
+
+                                <div className="mt-3 flex justify-between items-center text-sm">
+                                    <select
+                                        value={ticket.status}
+                                        onChange={(e) => {
+                                            e.stopPropagation(); // Prevent card click
+                                            handleStatusChange(ticket.id, e.target.value as Ticket['status']);
+                                        }}
+                                        onClick={(e) => e.stopPropagation()} // Stop click propagation from select
+                                        className="border rounded px-1 py-0 text-xs text-gray-600 bg-white"
+                                    >
+                                        {Object.keys(statusColors).map(statusOption => (
+                                            <option key={statusOption} value={statusOption}>{statusOption}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent card click
+                                            const newAssignee = prompt(`Assign ${ticket.id} to:`, ticket.assignedTo || '');
+                                            if (newAssignee !== null) {
+                                                handleAssignChange(ticket.id, newAssignee === '' ? null : newAssignee);
+                                            }
+                                        }}
+                                        className="px-2 py-1 text-xs bg-blue-600 rounded hover:bg-gray-600 text-white"
+                                    >
+                                        Assign
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                        {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).length === 0 && (
+                            <div className="text-center text-gray-500 italic py-4">
+                                No tickets in this status.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            ))}
 
           </div>
       </div>
@@ -1361,8 +1584,14 @@ ${formattedKB}
                         {/* END MODIFIED: Priority Display to Dropdown */}
                         <div>
                             <p className="text-sm font-semibold text-gray-600">Assigned To:</p>
-                            <p className="text-gray-800">{selectedTicket.assignedTo || 'Unassigned'}</p>
+                            <p className="text-gray-800">{selectedTicket.assignedTo || 'Unassigned'} ({selectedTicket.department})</p> {/* Display department here too */}
                         </div>
+                         {/* ADDED: Display Department - REMOVED as it's now in Assigned To line */}
+                         {/* <div>
+                             <p className="text-sm font-semibold text-gray-600">Department:</p>
+                             <p className="text-gray-800">{selectedTicket.department}</p>
+                         </div> */}
+                         {/* END ADDED */}
                          <div>
                             <p className="text-sm font-semibold text-gray-600">Channel:</p>
                             <p className="text-gray-800">{selectedTicket.channel}</p>
@@ -1714,10 +1943,93 @@ ${formattedKB}
                     </div>
                     {/* END ADDED: Other Actions Section */}
 
+
                </div>
            </div>
        )}
        {/* --- End Detailed Ticket View Modal --- */}
+
+       {/* ADDED: Related Concerns Section (Rendered below the main Kanban board, always visible) */}
+        <div className="max-w-screen-3xl mx-auto mt-8 p-6 bg-white rounded-lg shadow-md"> {/* Container for the related concerns section */}
+            <h3 className="text-xl font-bold text-blue-900 mb-4 border-b pb-2">
+                Related Concerns {selectedTicket ? `for ${selectedTicket.id}` : ' '} {/* Update title based on selected ticket */}
+            </h3>
+
+            {/* Conditional rendering based on whether a ticket is selected or if related tickets are found */}
+            {Object.keys(relatedTicketsByDepartment).length > 0 ? (
+                <>
+                    {/* Display message indicating which ticket is being used for related concerns */}
+                    <p className="text-gray-700 mb-4">
+                         {selectedTicket
+                             ? `Showing concerns related to ticket ${selectedTicket.id}. Select tickets below to send a tailored response.`
+                             : 'Showing related concerns. Select tickets below to send a tailored response.'
+                         }
+                    </p>
+
+                    {/* Conceptual Visualization (Simplified) */}
+                    {/* This is a placeholder for the arrow visualization from your screenshot.
+                        Implementing actual SVG/canvas drawing for arrows between dynamic elements
+                        is complex and requires calculating positions. For this demo, we'll
+                        just show the related tickets grouped by department.
+                    */}
+                     {/*
+                     <div className="flex items-center justify-center my-6">
+                         <div className="flex flex-col items-center">
+                             <div className="text-center font-semibold text-gray-800 mb-2">Current Ticket ({selectedTicket ? selectedTicket.id : 'Default'})</div>
+                             <ArrowDownRight className="w-8 h-8 text-blue-500" />
+                         </div>
+                         <div className="ml-8 text-center font-semibold text-gray-800">Related Concerns</div>
+                     </div>
+                     */}
+
+                    {/* Related Tickets Grouped by Department */}
+                    <div className="space-y-6">
+                        {Object.entries(relatedTicketsByDepartment).map(([department, tickets]) => (
+                            <div key={department} className="border rounded-lg p-4 bg-blue-50">
+                                <h4 className="text-lg font-semibold text-blue-800 mb-3">{department}</h4>
+                                <div className="space-y-3">
+                                    {tickets.map(ticket => (
+                                        <div key={ticket.id} className="flex items-center bg-white p-3 rounded-md shadow-sm border border-blue-100">
+                                             <input
+                                                 type="checkbox"
+                                                 className="mr-3 w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                                                 checked={selectedRelatedTicketIds.includes(ticket.id)}
+                                                 onChange={(e) => handleRelatedCheckboxChange(ticket.id, e.target.checked)} // Use the local handler
+                                             />
+                                            <div>
+                                                <div className="font-semibold text-gray-800 text-sm">{ticket.subject} (ID: {ticket.id})</div>
+                                                <div className="text-xs text-gray-600">Channel: {ticket.channel} | Status: {ticket.status}</div>
+                                                 <div className="text-xs text-gray-600">Assigned: {ticket.assignedTo || 'Unassigned'}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Bulk Action Button */}
+                    <div className="mt-6 flex justify-end items-center space-x-4">
+                         {bulkReplyStatus && (
+                             <p className={`text-sm italic ${bulkReplyStatus.startsWith('Error') ? 'text-red-600' : 'text-green-600'}`}>
+                                 {bulkReplyStatus}
+                             </p>
+                         )}
+                        <button
+                            onClick={handleSendBulkTailoredResponse} // Use the local handler
+                            className="flex items-center bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled={selectedRelatedTicketIds.length === 0 || isSendingBulkReply}
+                        >
+                            {isSendingBulkReply ? 'Sending...' : `Send Tailored Response to ${selectedRelatedTicketIds.length} Ticket(s)`}
+                        </button>
+                    </div>
+                </>
+            ) : (
+                // Display message if no related tickets are found (either initially or for a selected ticket)
+                <p className="text-gray-700 italic text-center py-4">No related concerns found for the moment.</p>
+            )}
+        </div>
+       {/* --- End Related Concerns Section --- */}
 
 
      </div>
