@@ -18,6 +18,30 @@ export const hardcodedKnowledgeBase = [
     { id: 'KB010', title: 'Account Verification Process', content: 'To verify your account for certain actions (like changing email or password), you may be asked to provide information like your account creation date, recent activity, or answer security questions.' },
 ];
 
+// Hardcoded Ticket Data
+export const hardcodedTickets = [
+  { ticketId: 'TCKT-1001', name: 'Alice Mendoza', email: 'alice.m@example.com', phone: '9171234567', tier: 1, product: 'Mobile App', issueSummary: 'App crashes after login', dateSubmitted: '2025-05-10', notes: 'First-time report' },
+  { ticketId: 'TCKT-1002', name: 'Bryan Lee', email: 'bryan.lee@example.com', phone: '9181234567', tier: 2, product: 'Web Dashboard', issueSummary: 'Missing data in analytics tab', dateSubmitted: '2025-05-10', notes: '' },
+  { ticketId: 'TCKT-1003', name: 'Carla Rivera', email: 'carla.r@example.com', phone: '9192223334', tier: 0, product: 'Billing Portal', issueSummary: "Can't update payment method", dateSubmitted: '2025-05-11', notes: 'Tier 0 - redirected to self-help' },
+  { ticketId: 'TCKT-1004', name: 'David Cruz', email: 'davidc@example.net', phone: '9193455678', tier: 3, product: 'Cloud Storage', issueSummary: 'Files disappeared from shared folder', dateSubmitted: '2025-05-11', notes: 'Escalated' },
+  { ticketId: 'TCKT-1005', name: 'Emma Santos', email: 'emma.s@example.com', phone: '9213456789', tier: 1, product: 'Web App', issueSummary: 'CAPTCHA not loading on login', dateSubmitted: '2025-05-12', notes: '' },
+  { ticketId: 'TCKT-1006', name: 'Bryan Lee', email: 'bryan.lee@example.com', phone: '9181234567', tier: 2, product: 'Web Dashboard', issueSummary: 'Still missing analytics after update', dateSubmitted: '2025-05-12', notes: 'Follow-up to TCKT-1002' },
+  { ticketId: 'TCKT-1007', name: 'Fiona Tan', email: 'fiona.t@example.org', phone: '9224345678', tier: 4, product: 'Enterprise API', issueSummary: 'Authentication tokens keep expiring', dateSubmitted: '2025-05-12', notes: 'Tier 4 – SLA in place' },
+  { ticketId: 'TCKT-1008', name: 'George Lim', email: 'george.lim@example.com', phone: '9233456781', tier: 0, product: 'Mobile App', issueSummary: 'Forgot password – no reset email', dateSubmitted: '2025-05-12', notes: 'Resolved via FAQ' },
+  { ticketId: 'TCKT-1009', name: 'Hannah Yu', email: 'hannahy@example.net', phone: '9241234567', tier: 1, product: 'Billing Portal', issueSummary: 'Charged twice for subscription', dateSubmitted: '2025-05-13', notes: '' },
+  { ticketId: 'TCKT-1010', name: 'Isaac Villanueva', email: 'isaacv@example.org', phone: '9254567891', tier: 2, product: 'Web App', issueSummary: 'Error 403 when submitting form', dateSubmitted: '2025-05-13', notes: '' },
+  { ticketId: 'TCKT-1011', name: 'Carla Rivera', email: 'carla.r@example.com', phone: '9192223334', tier: 0, product: 'Billing Portal', issueSummary: 'Payment method still invalid', dateSubmitted: '2025-05-13', notes: 'Repeat of TCKT-1003' },
+  { ticketId: 'TCKT-1012', name: 'Jack Ong', email: 'jack.ong@example.com', phone: '9261234567', tier: 3, product: 'Cloud Storage', issueSummary: 'Shared links aren’t working', dateSubmitted: '2025-05-13', notes: 'High-priority client' },
+  { ticketId: 'TCKT-1013', name: 'Alice Mendoza', email: 'alice.m@example.com', phone: '9171234567', tier: 1, product: 'Mobile App', issueSummary: 'Now seeing black screen after login', dateSubmitted: '2025-05-14', notes: 'Follow-up to TCKT-1001' },
+  { ticketId: 'TCKT-1014', name: 'Kyle Enriquez', email: 'kyle.e@example.net', phone: '9272345678', tier: 1, product: 'Web Dashboard', issueSummary: 'Can\'t export CSV reports', dateSubmitted: '2025-05-14', notes: '' },
+  { ticketId: 'TCKT-1015', name: 'Luis Martinez', email: 'luis.m@example.com', phone: '9281234567', tier: 2, product: 'Billing Portal', issueSummary: 'Wrong invoice address', dateSubmitted: '2025-05-14', notes: '' },
+  { ticketId: 'TCKT-1016', name: 'Fiona Tan', email: 'fiona.t@example.org', phone: '9224345678', tier: 4, product: 'Enterprise API', issueSummary: 'Audit log endpoint failing intermittently', dateSubmitted: '2025-05-14', notes: 'Ongoing Tier 4 issue' },
+  { ticketId: 'TCKT-1017', name: 'Hannah Yu', email: 'hannahy@example.net', phone: '9241234567', tier: 1, product: 'Billing Portal', issueSummary: 'Refund not reflected after 48 hrs', dateSubmitted: '2025-05-15', notes: 'Follow-up to TCKT-1009' },
+  { ticketId: 'TCKT-1018', name: 'Mark De Leon', email: 'mark.d@example.com', phone: '9293456781', tier: 0, product: 'Mobile App', issueSummary: 'Account locked after failed logins', dateSubmitted: '2025-05-15', notes: '' },
+  { ticketId: 'TCKT-1019', name: 'Emma Santos', email: 'emma.s@example.com', phone: '9213456789', tier: 1, product: 'Web App', issueSummary: 'Images won’t load on dashboard', dateSubmitted: '2025-05-15', notes: 'New issue' },
+  { ticketId: 'TCKT-1020', name: 'Bryan Lee', email: 'bryan.lee@example.com', phone: '9181234567', tier: 2, product: 'Web Dashboard', issueSummary: 'Data mismatch between users and chart', dateSubmitted: '2025-05-16', notes: 'Third ticket from same customer' },
+];
+
 // You could add other hardcoded data here later, e.g.,
 // export const hardcodedCustomers = [...];
-// export const hardcodedTickets = [...]; // If needed elsewhere, though currently in tickets/page.tsx
+// If needed elsewhere, though currently in tickets/page.tsx

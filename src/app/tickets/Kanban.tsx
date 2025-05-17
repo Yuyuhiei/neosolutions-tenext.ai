@@ -12,6 +12,7 @@ import { hardcodedKnowledgeBase } from '../lib/hardcodedData'; // Import hardcod
 // Your API key should NOT be used here for Gemini calls in the final real-time version.
 // Gemini calls should be made from your secure backend.
 // For this combined modal view, keeping it client-side as before, but the warning remains.
+// Replace with your actual API key or load from environment variables securely on the backend.
 const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM";
 
 if (!apiKey) {
@@ -45,6 +46,13 @@ declare global {
 
 // --- Hardcoded Data ---
 // This simulates data that would eventually come from your Supabase database
+
+interface Message {
+    sender: 'Customer' | 'Agent';
+    text: string;
+    timestamp: string; // ISO date string
+}
+
 interface Ticket {
   id: string;
   subject: string;
@@ -56,8 +64,25 @@ interface Ticket {
   updatedAt: string; // ISO date string
   lastMessageAt: string; // ISO date string
   description?: string; // Added description field for detail view
-  // Add other fields like customerId, notes, historyIds etc. later
+  publicNotes?: string; // ADDED: Public notes field
+  privateNotes?: string; // ADDED: Private notes field
+  conversation?: Message[]; // ADDED: Conversation history
 }
+
+// ADDED: Hardcoded Interaction History (Universal for demo - distinct from conversation)
+const hardcodedInteractionHistory = [
+    { id: 1, type: 'Email Received', timestamp: '2023-10-26T10:00:00Z', summary: 'Customer reported login issue.' },
+    { id: 2, type: 'Agent Note', timestamp: '2023-10-26T10:15:00Z', summary: 'Checked account status, no lockouts found.' },
+    { id: 3, type: 'Email Sent', timestamp: '2023-10-26T10:30:00Z', summary: 'Sent password reset instructions.' },
+     { id: 4, type: 'Phone Call', timestamp: '2023-10-26T11:00:00Z', summary: 'Follow-up call from customer, still unable to login.' },
+     { id: 5, type: 'Agent Note', timestamp: '2023-10-26T11:10:00Z', summary: 'Advised customer to clear browser cache.' },
+    // Add more sample history entries as needed
+];
+
+// Add a helper function to format dates nicely for display
+const formatHistoryDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+};
 
 const initialTickets: Ticket[] = [
   {
@@ -71,6 +96,13 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T10:30:00Z',
     lastMessageAt: '2023-10-26T10:30:00Z',
     description: 'Customer is unable to access their account after multiple attempts. They have verified their username and password.',
+    conversation: [ // ADDED: Sample conversation for T001
+        { sender: 'Customer', text: 'I cannot log in to my account.', timestamp: '2023-10-26T10:00:00Z' },
+        { sender: 'Agent', text: 'Hello, I understand you are having trouble logging in. Can you please provide your username?', timestamp: '2023-10-26T10:10:00Z' },
+        { sender: 'Customer', text: 'My username is user123.', timestamp: '2023-10-26T10:15:00Z' },
+    ],
+    publicNotes: 'Customer is very frustrated.', // ADDED Sample Note
+    privateNotes: 'Need to escalate if password reset fails again.', // ADDED Sample Note
   },
   {
     id: 'T002',
@@ -83,6 +115,11 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T11:15:00Z',
     lastMessageAt: '2023-10-26T11:15:00Z',
     description: 'Customer is asking when their next billing cycle begins and how much the charge will be.',
+    conversation: [ // ADDED: Sample conversation for T002
+         { sender: 'Customer', text: 'When is my next billing cycle?', timestamp: '2023-10-26T11:15:00Z' },
+    ],
+     publicNotes: '',
+    privateNotes: 'Check billing system for exact date.',
   },
    {
     id: 'T003',
@@ -95,6 +132,9 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T14:00:00Z',
     lastMessageAt: '2023-10-26T14:00:00Z',
     description: 'Customer would like to request a new feature for the product, specifically the ability to export data in a different format.',
+    conversation: [], // Empty conversation initially
+     publicNotes: 'Forward to product team.',
+    privateNotes: '',
   },
    {
     id: 'T004',
@@ -107,6 +147,9 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T09:00:00Z',
     lastMessageAt: '2023-10-26T09:00:00Z',
     description: 'Customer is unhappy with the response time on a previous ticket and is requesting escalation.',
+    conversation: [], // Empty conversation initially
+     publicNotes: '',
+    privateNotes: 'Agent A needs to call customer directly.',
   },
    {
     id: 'T005',
@@ -119,6 +162,9 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T15:00:00Z',
     lastMessageAt: '2023-10-26T15:00:00Z',
     description: 'Customer is following up on ticket T001 regarding their login issue. Still unable to access account.',
+    conversation: [], // Empty conversation initially
+    publicNotes: '',
+    privateNotes: '',
   },
     {
     id: 'T006',
@@ -131,6 +177,9 @@ const initialTickets: Ticket[] = [
     updatedAt: '2023-10-26T13:00:00Z',
     lastMessageAt: '2023-10-26T13:00:00Z',
     description: 'Customer reported an error while trying to complete a payment online. Transaction failed.',
+    conversation: [], // Empty conversation initially
+     publicNotes: '',
+    privateNotes: '',
   },
    {
     id: 'T007',
@@ -143,6 +192,9 @@ const initialTickets: Ticket[] = [
     updatedAt: '2025-05-17T11:00:00Z', // Updated date for testing
     lastMessageAt: '2025-05-17T11:00:00Z', // Updated date for testing
     description: 'Customer is inquiring about the status of their refund request submitted last week.',
+    conversation: [], // Empty conversation initially
+     publicNotes: '',
+    privateNotes: '',
   },
 ];
 // --- End Hardcoded Data ---
@@ -168,10 +220,38 @@ const priorityColors: Record<Ticket['priority'], string> = {
 // Define the order of columns/statuses for the Kanban board
 const kanbanStatuses: Ticket['status'][] = ['New', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
 
+// ADDED: Helper function to add a new hardcoded ticket
+const addNewHardcodedTicket = (setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>) => {
+     // Generate a more robust unique ID for demo purposes
+     const newTicketId = `T${Date.now().toString().slice(-6)}-${Math.random().toFixed(0).slice(-3)}`;
+     const now = new Date().toISOString();
+
+     const simulatedNewTicket: Ticket = {
+         id: newTicketId,
+         subject: 'New Automated Ticket: Customer Inquiry', // Hardcoded subject
+         status: 'New', // Starts as New
+         priority: 'Medium', // Default priority
+         assignedTo: null, // Unassigned initially
+         channel: 'Phone', // Simulated phone call channel
+         createdAt: now,
+         updatedAt: now,
+         lastMessageAt: now,
+         description: 'Automated transcription: Customer called with a general inquiry.', // Hardcoded description
+         conversation: [{ sender: 'Customer', text: 'Hello, I have a question about my service.', timestamp: now }], // Initial message
+         publicNotes: '',
+         privateNotes: 'Ticket created automatically by AI after call.',
+     };
+
+     setTickets(prevTickets => [...prevTickets, simulatedNewTicket]);
+     console.log('Simulating adding new ticket:', simulatedNewTicket);
+     alert(`New ticket ${newTicketId} automatically created!`); // Notify the agent
+};
+
 
 export default function TicketManagementPage() {
   // --- State for Ticket Data and UI Controls ---
   const [tickets, setTickets] = useState<Ticket[]>(initialTickets);
+  // Filter and Sort state can still be used, but might apply *within* columns or globally
   const [filterStatus, setFilterStatus] = useState<string>('All'); // Global filter (optional for Kanban)
   const [sortBy, setSortBy] = useState<keyof Ticket>('createdAt'); // Field to sort by within columns
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // asc or desc
@@ -180,10 +260,16 @@ export default function TicketManagementPage() {
 
   // --- State for Detailed Ticket View Modal ---
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
-  // Use useMemo to find the selected ticket object efficiently
   const selectedTicket = useMemo(() => {
       return tickets.find(ticket => ticket.id === selectedTicketId);
-  }, [selectedTicketId, tickets]);
+  }, [selectedTicketId, tickets]); // Recompute when selectedTicketId or tickets change
+
+  // ADDED: State for editable notes in the modal
+    const [publicNotes, setPublicNotes] = useState('');
+    const [privateNotes, setPrivateNotes] = useState('');
+
+    // ADDED: State for conversation history in the modal
+    const [currentConversation, setCurrentConversation] = useState<Message[]>([]);
 
 
   // --- State for AI Processing (Moved from page.tsx) ---
@@ -195,6 +281,11 @@ export default function TicketManagementPage() {
   const [composeReply, setComposeReply] = useState('');
   const [processingError, setProcessingError] = useState<string | null>(null);
 
+   // ADDED: State for call simulation popup
+    const [showIncomingCallPopup, setShowIncomingCallPopup] = useState(false);
+    const [callSimulationPhase, setCallSimulationPhase] = useState<'ringing' | 'ai_answering' | null>(null);
+    const callTimerRef = useRef<NodeJS.Timeout | null>(null); // Use useRef for the timer ID
+
   // --- State for Actual Speech-to-Text (Moved from page.tsx) ---
   const [isRecording, setIsRecording] = useState(false);
   const [sttError, setSttError] = useState<string | null>(null);
@@ -203,6 +294,39 @@ export default function TicketManagementPage() {
 
   // Use useRef to hold the SpeechRecognition instance (Moved from page.tsx)
   const recognitionRef = useRef<any | null>(null);
+
+  // ADDED: Handle simulating an incoming call
+ const handleSimulateIncomingCall = () => {
+     if (showIncomingCallPopup) return; // Prevent multiple popups
+
+     setShowIncomingCallPopup(true);
+     setCallSimulationPhase('ringing');
+     console.log('Simulating incoming call...');
+
+     // Timer for "ringing" phase (3 seconds)
+     callTimerRef.current = setTimeout(() => {
+         setCallSimulationPhase('ai_answering');
+         console.log('AI is now answering...');
+
+         // Timer for "AI answering" phase (5 seconds)
+         callTimerRef.current = setTimeout(() => {
+             setShowIncomingCallPopup(false); // Close popup
+             setCallSimulationPhase(null); // Reset phase
+             console.log('Call simulation ended, creating ticket...');
+             addNewHardcodedTicket(setTickets); // Add the hardcoded ticket
+         }, 5000); // AI answering duration
+
+     }, 3000); // Ringing duration
+ };
+
+ // ADDED: Cleanup timer on component unmount
+ useEffect(() => {
+     return () => {
+         if (callTimerRef.current) {
+             clearTimeout(callTimerRef.current);
+         }
+     };
+ }, []); // Empty dependency array to run only on mount and unmount
 
 
   // --- Effect to Initialize SpeechRecognition (Moved from page.tsx) ---
@@ -228,9 +352,8 @@ export default function TicketManagementPage() {
               setIsRecording(true);
               setSttError(null);
               setInterimTranscript('');
-              // Clear existing client concern when starting a *new* recording?
-              // Or append? Let's clear for a fresh recording for the modal.
-              setClientConcern('');
+              // Do NOT clear clientConcern here, let it accumulate
+              // setClientConcern(''); // Removed clearing here
           };
 
           recognitionRef.current.onresult = (event: any) => {
@@ -309,11 +432,16 @@ export default function TicketManagementPage() {
   }, []); // Effect runs once on mount
 
 
-    // --- Effect to Load Ticket Data into AI Section when Modal Opens ---
+    // --- Effect to Load Ticket Data, Notes, and Conversation into Modal Sections ---
     useEffect(() => {
         if (selectedTicket) {
             // When a ticket is selected, populate the client concern with its description
             setClientConcern(selectedTicket.description || '');
+            // Load existing notes into state
+            setPublicNotes(selectedTicket.publicNotes || ''); // Load public notes
+            setPrivateNotes(selectedTicket.privateNotes || ''); // Load private notes
+            setCurrentConversation(selectedTicket.conversation || []); // ADDED: Load conversation
+
             // Reset AI results when a new ticket is selected
             setSummary('');
             setSuggestedReplies([]);
@@ -325,13 +453,16 @@ export default function TicketManagementPage() {
                 recognitionRef.current.stop();
             }
         } else {
-             // When modal closes, clear AI state
+             // When modal closes, clear AI state, notes state, and conversation state
             setClientConcern('');
             setSummary('');
             setSuggestedReplies([]);
             setSuggestedKB([]);
             setComposeReply('');
             setProcessingError(null);
+            setPublicNotes(''); // Clear public notes state
+            setPrivateNotes(''); // Clear private notes state
+            setCurrentConversation([]); // ADDED: Clear conversation state
             // Ensure recording is stopped if modal closes while recording
              if (isRecording && recognitionRef.current) {
                 recognitionRef.current.stop();
@@ -628,15 +759,57 @@ ${formattedKB}
         setComposeReply('');
     };
 
-     // Function to simulate sending reply (for UI demo) (Moved from page.tsx)
-    const handleSendReply = () => {
+     // ADDED: Function to handle sending an agent's reply and update conversation
+    const handleSendAgentReply = () => {
+        if (!composeReply.trim()) {
+            alert('Please type a reply to send.');
+            return;
+        }
+        if (!selectedTicket) {
+            console.error("No ticket selected to send a reply to.");
+            return;
+        }
+
+        const agentMessage: Message = {
+            sender: 'Agent',
+            text: composeReply.trim(),
+            timestamp: new Date().toISOString(),
+        };
+
+        // Update the local conversation state
+        setCurrentConversation(prevConversation => [...prevConversation, agentMessage]);
+        console.log("Added agent message to conversation:", agentMessage);
+
+        // Simulate updating the ticket in the main tickets state
+        setTickets(prevTickets => prevTickets.map(ticket =>
+            ticket.id === selectedTicket.id
+                ? { ...ticket, conversation: [...(ticket.conversation || []), agentMessage], updatedAt: new Date().toISOString(), lastMessageAt: new Date().toISOString() }
+                : ticket
+        ));
+
+        // Clear the compose reply area
+        setComposeReply('');
+        console.log("Reply sent (simulated) and compose area cleared.");
+
+        // Optional: Automatically scroll the conversation area to the bottom
+        const conversationArea = document.getElementById('conversation-area') as HTMLDivElement | null; // Add ID to conversation div
+         if (conversationArea) {
+              conversationArea.scrollTop = conversationArea.scrollHeight;
+         }
+    };
+
+
+    // Function to simulate sending reply (This is now just a simulation alert, not the actual send)
+     // Renamed the old handleSendReply to avoid conflict and keep the new one for actual send.
+    const handleSimulateSendReplyAlert = () => {
         if (composeReply.trim()) {
-            alert(`Simulating sending reply:\n\n${composeReply}`);
-            setComposeReply(''); // Clear after simulating send
+            alert(`Simulating sending reply (old method):\n\n${composeReply}`);
+            // Don't clear composeReply here if the actual send button clears it
         } else {
              alert('Compose reply is empty.');
         }
     };
+
 
     // Function to populate compose reply with a suggestion (Moved from page.tsx)
     const handleSuggestionClick = (suggestion: string) => {
@@ -698,14 +871,26 @@ ${formattedKB}
   return (
     // Main container with light blue background theme
     <div className="min-h-screen bg-blue-50 p-8">
+      {/* Floating Simulate Call Button */}
+       <button
+           onClick={handleSimulateIncomingCall}
+           className="fixed bottom-8 right-8 bg-green-500 text-white p-4 rounded-full shadow-lg hover:bg-green-600 transition-colors z-40" // z-40 to be below modals but above other content
+           disabled={showIncomingCallPopup} // Disable if popup is already shown
+       >
+           <Phone className="w-6 h-6" />
+       </button>
       {/* Header */}
       <header className="mb-6 text-center">
         <h1 className="text-4xl font-bold text-blue-900 mb-2">
-          Ticket Management
+          Ticket Management (Kanban)
         </h1>
         <p className="text-lg text-gray-700">
           View and manage all customer tickets in a Kanban board.
         </p>
+         {/* Display STT errors */}
+         {sttError && (
+              <p className="text-red-600 mt-2">{sttError}</p>
+         )}
       </header>
 
       {/* Controls Area (Filter, Sort, Create) */}
@@ -911,12 +1096,56 @@ ${formattedKB}
       )}
        {/* --- End Manual Ticket Creation Modal --- */}
 
+       {/* Incoming Call Simulation Popup */}
+        {showIncomingCallPopup && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+                    {callSimulationPhase === 'ringing' && (
+                        <>
+                            <Phone className="w-12 h-12 text-green-500 mx-auto mb-4 animate-pulse" />
+                            <h3 className="text-xl font-semibold text-gray-800 mb-4">Incoming Call...</h3>
+                            {/* Answer/End buttons (for simulation they just close the popup for now) */}
+                            <div className="flex justify-center space-x-4">
+                                <button
+                                    onClick={() => setShowIncomingCallPopup(false)} // Simulate answering/ending by closing
+                                    className="bg-green-600 text-white px-6 py-2 rounded-md hover:bg-green-700 transition-colors"
+                                >
+                                    Answer
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (callTimerRef.current) clearTimeout(callTimerRef.current); // Clear timers
+                                        setShowIncomingCallPopup(false);
+                                        setCallSimulationPhase(null);
+                                        console.log('Call simulation ended by user.');
+                                    }}
+                                    className="bg-red-600 text-white px-6 py-2 rounded-md hover:bg-red-700 transition-colors"
+                                >
+                                    End
+                                </button>
+                            </div>
+                        </>
+                    )}
 
-       {/* --- Detailed Ticket View Modal (Including AI Processing) --- */}
+                    {callSimulationPhase === 'ai_answering' && (
+                        <>
+                            <Mic className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-pulse" /> {/* Using Mic icon for AI */}
+                            <h3 className="text-xl font-semibold text-gray-800 mb-4">AI Agent Answering...</h3>
+                            <p className="text-gray-600">The AI is currently attempting to resolve the concern.</p>
+                            {/* No buttons here, it transitions automatically */}
+                        </>
+                    )}
+                </div>
+            </div>
+        )}
+        {/* END ADDED: Incoming Call Simulation Popup */}
+
+
+       {/* --- Detailed Ticket View Modal (Including AI Processing and Conversation) --- */}
        {selectedTicket && (
            // Increased size: max-w-screen-xl takes most of the width, max-h-[90vh] for height
            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-               <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-screen-2xl max-h-[95vh] overflow-y-auto"> {/* Increased size classes */}
+               <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-screen-3xl max-h-[95vh] overflow-y-auto"> {/* Increased size classes */}
                    {/* Modal Header */}
                    <div className="flex justify-between items-center border-b pb-3 mb-4">
                        <h2 className="text-2xl font-bold text-blue-900">Ticket Details: {selectedTicket.id}</h2>
@@ -937,12 +1166,28 @@ ${formattedKB}
                                 {selectedTicket.status}
                             </span>
                        </div>
+                        {/* MODIFIED: Priority Display to Dropdown */}
                         <div>
                             <p className="text-sm font-semibold text-gray-600">Priority:</p>
-                             <span className={`${priorityColors[selectedTicket.priority]}`}>
-                                {selectedTicket.priority}
-                             </span>
+                             <select
+                                 value={selectedTicket.priority}
+                                 onChange={(e) => {
+                                     // Update the priority of the selected ticket in the main tickets state
+                                     setTickets(tickets.map(t =>
+                                         t.id === selectedTicket.id ? { ...t, priority: e.target.value as Ticket['priority'], updatedAt: new Date().toISOString() } : t
+                                     ));
+                                      console.log(`Simulating priority change for ${selectedTicket.id} to ${e.target.value}`);
+                                 }}
+                                 className={`border rounded px-2 py-1 text-sm ${priorityColors[selectedTicket.priority]}`} // Apply priority color
+                             >
+                                 {Object.keys(priorityColors).map(priorityOption => (
+                                     <option key={priorityOption} value={priorityOption}>
+                                         {priorityOption}
+                                     </option>
+                                 ))}
+                             </select>
                         </div>
+                        {/* END MODIFIED: Priority Display to Dropdown */}
                         <div>
                             <p className="text-sm font-semibold text-gray-600">Assigned To:</p>
                             <p className="text-gray-800">{selectedTicket.assignedTo || 'Unassigned'}</p>
@@ -961,22 +1206,36 @@ ${formattedKB}
                         </div>
                    </div>
 
-                   {/* Description (Original Kanban Modal Content - Keep for reference but AI section will use it) */}
-                   {/* <div className="mb-6">
-                       <p className="text-sm font-semibold text-gray-600 mb-2">Description:</p>
-                       <div className="bg-gray-50 p-3 rounded-md text-gray-800">
-                           {selectedTicket.description || 'No description provided.'}
-                       </div>
-                   </div> */}
+
+                   {/* --- AI Processing Area (Moved from page.tsx) + Conversation (5 Columns) --- */}
+                   {/* Use the five-column grid structure inside the modal */}
+                    <main className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6"> {/* MODIFIED: lg:grid-cols-5 */}
+
+                     {/* ADDED: First Column: Conversation History */}
+                    <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
+                        <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full flex flex-col"> {/* Use flex-col for chat layout */}
+                            <h2 className="text-xl font-semibold text-blue-700 mb-4 border-b pb-2">Conversation</h2>
+                            {/* Conversation Messages Display Area */}
+                            <div id="conversation-area" className="flex-grow overflow-y-auto h-full space-y-4 pr-2"> {/* Added space-y for message spacing, pr for scrollbar */}
+                                {currentConversation.length > 0 ? (
+                                    currentConversation.map((message, index) => (
+                                        <div key={index} className={`flex ${message.sender === 'Agent' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[80%] p-3 rounded-lg ${message.sender === 'Agent' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}>
+                                                <p className="text-sm">{message.text}</p>
+                                                <p className="text-xs text-right mt-1 opacity-80">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p> {/* Display time */}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="text-center text-gray-500 italic">No conversation history for this ticket.</div>
+                                )}
+                            </div>
+                        </section>
+                    </div> {/* End First Column */}
 
 
-                   {/* --- AI Processing Area (Moved from page.tsx) --- */}
-                   {/* Use the four-column grid structure inside the modal */}
-                   {/* Removed max-w-full from here, let the modal content div control width */}
-                    <main className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6"> {/* Reduced mb from 30 to 6 */}
-
-                        {/* First Column: Customer Ticket and Ticket Summary */}
-                        <div className="flex flex-col gap-6 w-full">
+                        {/* Original First Column (now Second): Customer Ticket and Ticket Summary */}
+                        <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
                             {/* Customer Ticket Input/Real-time Transcript */}
                             <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                                  <h2 className="text-xl font-semibold text-blue-700 mb-4">Customer Ticket</h2>
@@ -998,7 +1257,7 @@ ${formattedKB}
                                     }}
                                     disabled={isProcessing || isRecording} // Disable if processing or recording
                                  ></textarea>
-                                 <div className="flex justify-between items-center mt-4 w-full gap-3"> {/* Adjusted layout */}
+                                 <div className="flex justify-between items-center mt-4 w-full gap-2"> {/* Adjusted layout */}
                                       {/* Speech-to-Text Button */}
                                      <button
                                           onClick={handleToggleSpeechToText}
@@ -1048,13 +1307,13 @@ ${formattedKB}
                                       )}
                                  </div>
                             </section>
-                        </div> {/* End First Column */}
+                        </div> {/* End Second Column */}
 
-                        {/* Second Column: Knowledge Base Suggestions */}
-                        <div className="flex flex-col gap-6 w-full">
+                        {/* Original Second Column (now Third): Knowledge Base Suggestions */}
+                        <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
                              <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                                 <h2 className="text-xl font-semibold text-blue-700 mb-4">Knowledge Base Suggestions</h2>
-                                 <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow">
+                                 <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow"> {/* Changed max-h to h-full and added flex-grow */}
                                      {suggestedKB.length > 0 && suggestedKB[0].id === 'KB-None' ? (
                                           <p className="text-gray-600 italic">{suggestedKB[0].title}</p>
                                      ) : suggestedKB.length > 0 ? (
@@ -1071,13 +1330,13 @@ ${formattedKB}
                                      )}
                                  </div>
                             </section>
-                        </div> {/* End Second Column */}
+                        </div> {/* End Third Column */}
 
-                        {/* Third Column: Response Suggestions */}
-                        <div className="flex flex-col gap-6 w-full">
+                        {/* Original Third Column (now Fourth): Response Suggestions */}
+                        <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
                             <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                                 <h2 className="text-xl font-semibold text-blue-700 mb-4">Response Suggestions</h2>
-                                 <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow">
+                                 <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow"> {/* Set height to full and flex-grow */}
                                      {suggestedReplies.length > 0 ? (
                                          <ul className="list-disc pl-5 w-full">
                                              {suggestedReplies.map((reply, index) => (
@@ -1095,10 +1354,10 @@ ${formattedKB}
                                      )}
                                  </div>
                             </section>
-                        </div> {/* End Third Column */}
+                        </div> {/* End Fourth Column */}
 
-                        {/* Fourth Column: Compose Reply */}
-                         <div className="flex flex-col gap-6 w-full">
+                        {/* Original Fourth Column (now Fifth): Compose Reply */}
+                         <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
                          <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                             <h2 className="text-xl font-semibold text-blue-700 mb-4">Compose Reply</h2>
                              <textarea
@@ -1115,51 +1374,84 @@ ${formattedKB}
                                      <Eraser className="w-4 h-4 mr-1" /> Clear
                                  </button>
                                  <button
-                                     onClick={handleSendReply}
+                                     onClick={handleSendAgentReply} // MODIFIED: Use the new send handler
                                       className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                      disabled={!composeReply.trim()} // Disable if empty
+                                      disabled={!composeReply.trim() || !selectedTicket} // Disable if empty or no ticket selected
                                  >
                                      <Send className="w-4 h-4 mr-1" /> Send Reply
                                  </button>
                              </div>
                         </section>
-                        </div> {/* End Fourth Column */}
+                        </div> {/* End Fifth Column */}
 
                     </main>
-                    {/* --- End AI Processing Area --- */}
+                    {/* --- End AI Processing Area + Conversation --- */}
 
 
-                   {/* Interaction History Placeholder (Original Kanban Modal Content) */}
+                   {/* Interaction History Section (Keep this separate from the main conversation chat) */}
                    <div className="mb-6">
-                       <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Interaction History</h3>
-                       <div className="text-center text-gray-500 italic">
-                           {/* TODO: Implement display of customer interaction history */}
-                           <p>Placeholder for interaction history (emails, chats, call logs, notes).</p>
+                       <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Interaction History (Emails, Call Logs, etc.)</h3>
+                       <div className="bg-gray-50 p-3 rounded-md max-h-40 overflow-y-auto"> {/* Added max-height and overflow */}
+                           {hardcodedInteractionHistory.length > 0 ? (
+                               <ul>
+                                   {hardcodedInteractionHistory.map(interaction => (
+                                       <li key={interaction.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 text-sm text-gray-700">
+                                           <span className="font-semibold">{interaction.type}:</span> {interaction.summary}
+                                           <p className="text-xs text-gray-500 mt-1">{formatHistoryDate(interaction.timestamp)}</p> {/* Display formatted date */}
+                                       </li>
+                                   ))}
+                               </ul>
+                           ) : (
+                               <div className="text-center text-gray-500 italic">No interaction history available.</div>
+                           )}
                        </div>
                    </div>
+                   {/* END MODIFIED: Interaction History Section */}
 
-                   {/* Notes Placeholder (Original Kanban Modal Content) */}
+
+                   {/* MODIFIED: Notes Section */}
                    <div className="mb-6">
                        <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Notes</h3>
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                           {/* Public Notes Placeholder */}
+                           {/* Public Notes Textarea */}
                            <div className="bg-gray-50 p-3 rounded-md">
                                <p className="text-sm font-semibold text-gray-600 mb-2">Public Notes:</p>
-                               <div className="text-center text-gray-500 italic text-sm">
-                                   {/* TODO: Implement Public Notes */}
-                                   <p>Placeholder for customer-facing notes.</p>
-                               </div>
+                               <textarea
+                                    className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                                    placeholder="Add public notes here..."
+                                    value={publicNotes}
+                                    onChange={(e) => setPublicNotes(e.target.value)}
+                               ></textarea>
                            </div>
-                           {/* Private Notes Placeholder */}
+                           {/* Private Notes Textarea */}
                             <div className="bg-gray-50 p-3 rounded-md">
                                <p className="text-sm font-semibold text-gray-600 mb-2">Private Notes:</p>
-                               <div className="text-center text-gray-500 italic text-sm">
-                                   {/* TODO: Implement Private Notes */}
-                                   <p>Placeholder for internal notes.</p>
-                               </div>
+                               <textarea
+                                    className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
+                                    placeholder="Add private notes here..."
+                                    value={privateNotes}
+                                    onChange={(e) => setPrivateNotes(e.target.value)}
+                               ></textarea>
                            </div>
                        </div>
+                       {/* Conceptual Save Notes Button */}
+                        <div className="flex justify-end mt-4">
+                            <button
+                                onClick={() => {
+                                    // TODO: Implement saving notes to state/backend
+                                    console.log("Simulating saving notes:", { publicNotes, privateNotes });
+                                    alert("Notes saved (simulated)!");
+                                    // In a real app, you'd update the ticket object in your state/database
+                                    // For this demo, you might update the selectedTicket object locally
+                                }}
+                                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
+                            >
+                                Save Notes
+                            </button>
+                        </div>
                    </div>
+                   {/* END MODIFIED: Notes Section */}
+
 
                    {/* TODO: Add buttons for actions like Reply, Merge, Escalate, Close, etc. within the modal */}
                     <div className="flex justify-end space-x-4 mt-6">
