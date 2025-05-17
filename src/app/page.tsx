@@ -2,7 +2,7 @@
 
 'use client'; // This page will use client-side features like state and effects for charts
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Import useState and useEffect
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,7 +13,10 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Ticket, User, MessageSquare, Book, Settings } from 'lucide-react'; // Icons for buttons
+import { Ticket, User, MessageSquare, Book, Settings, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
+
+// Import hardcoded ticket data to derive insights
+import { hardcodedTickets } from './lib/hardcodedData';
 
 // Register Chart.js components
 ChartJS.register(
@@ -26,6 +29,7 @@ ChartJS.register(
 );
 
 // Hardcoded data for the charts and metrics (will be replaced with real data later)
+// Using dummy data for the chart for now, but could be generated from hardcodedTickets
 const hardcodedTicketData = {
   labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   datasets: [
@@ -56,8 +60,19 @@ const chartOptions = {
     title: {
       display: true,
       text: 'New vs Closed Tickets (Last 7 Days)',
+      color: '#1e3a8a', // Tailwind blue-900
     },
   },
+  scales: {
+    x: {
+      ticks: { color: '#4b5563' }, // Tailwind gray-600
+      grid: { color: '#e5e7eb' } // Tailwind gray-200
+    },
+    y: {
+      ticks: { color: '#4b5563' }, // Tailwind gray-600
+      grid: { color: '#e5e7eb' } // Tailwind gray-200
+    }
+  }
 };
 
 const hardcodedMetrics = {
@@ -80,27 +95,61 @@ const featureButtons = [
 
 
 export default function Dashboard() {
+  // State to hold derived insights from hardcoded data
+  const [insights, setInsights] = useState({
+    mostFrequentIssues: [] as { issue: string; count: number }[],
+    productsWithMostTickets: [] as { product: string; count: number }[],
+  });
+
+  // Derive insights from hardcoded tickets on component mount
+  useEffect(() => {
+    // Calculate most frequent issues
+    const issueCounts = hardcodedTickets.reduce((acc, ticket) => {
+      acc[ticket.issueSummary] = (acc[ticket.issueSummary] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const mostFrequentIssues = Object.entries(issueCounts)
+      .map(([issue, count]) => ({ issue, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Get top 5
+
+    // Calculate products with most tickets
+    const productCounts = hardcodedTickets.reduce((acc, ticket) => {
+      acc[ticket.product] = (acc[ticket.product] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const productsWithMostTickets = Object.entries(productCounts)
+      .map(([product, count]) => ({ product, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Get top 5
+
+    setInsights({ mostFrequentIssues, productsWithMostTickets });
+  }, []); // Empty dependency array ensures this runs only once on mount
+
+
   return (
-    // Main container with light blue background theme
-    <div className="min-h-screen bg-blue-50 p-8">
+    // Main container with light blue background theme and padding
+    <div className="min-h-screen bg-blue-50 p-4 md:p-8">
       {/* Header */}
-      <header className="mb-10 text-center">
-        <h1 className="text-4xl font-bold text-blue-900 mb-2">
+      <header className="mb-8 text-center">
+        <h1 className="text-3xl md:text-4xl font-bold text-blue-900 mb-2">
           Agent Dashboard
         </h1>
-        <p className="text-lg text-gray-700">
-          Overview of key metrics and quick access to features.
+        <p className="text-md md:text-lg text-gray-700">
+          Overview of key metrics, AI insights, and quick access to features.
         </p>
       </header>
 
       {/* Feature Buttons Section */}
-      <div className="flex justify-center space-x-6 mb-10">
+      <div className="flex flex-wrap justify-center gap-4 mb-8"> {/* Use gap and flex-wrap for responsiveness */}
         {featureButtons.map((button) => (
           // Use Tailwind for button styling
           <a
             key={button.name}
             href={button.href}
-            className="flex flex-col items-center p-4 bg-white rounded-lg shadow-md hover:bg-blue-100 transition duration-300 ease-in-out"
+            className="flex flex-col items-center p-4 bg-white rounded-lg shadow-md hover:bg-blue-100 transition duration-300 ease-in-out w-32 text-center" // Fixed width for consistency
           >
             {/* Icon */}
             <button.icon className="w-8 h-8 text-blue-600 mb-2" />
@@ -110,44 +159,81 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Reporting Dashboard Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
+      {/* Reporting and Insights Dashboard Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-7xl mx-auto">
 
         {/* Live Tickets Panel */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-blue-700 mb-4">Live Tickets</h2>
-          <p className="text-4xl font-bold text-gray-800">{hardcodedMetrics.liveTickets}</p>
-          <p className="text-gray-600">Open: {hardcodedMetrics.openTickets}</p>
-          <p className="text-gray-600">Unassigned: {hardcodedMetrics.unassignedTickets}</p>
+        <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+          <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
+            <Ticket className="w-6 h-6 mr-2 text-blue-600"/> Live Tickets Overview
+          </h2>
+          <p className="text-4xl font-bold text-gray-800 mb-2">{hardcodedMetrics.liveTickets}</p>
+          <p className="text-gray-600">Open: <span className="font-semibold">{hardcodedMetrics.openTickets}</span></p>
+          <p className="text-gray-600">Unassigned: <span className="font-semibold">{hardcodedMetrics.unassignedTickets}</span></p>
         </div>
 
-        {/* Average Response Time Panel */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-blue-700 mb-4">Avg. Response Time Today</h2>
-          <p className="text-4xl font-bold text-gray-800">{hardcodedMetrics.avgResponseTime}</p>
-          <p className="text-gray-600">FCR Rate: {hardcodedMetrics.fcrRate}</p>
+        {/* Performance Metrics Panel */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+          <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
+             <TrendingUp className="w-6 h-6 mr-2 text-blue-600"/> Performance Metrics
+          </h2>
+          <p className="text-gray-700 mb-2"><span className="font-semibold">Avg. Response Time Today:</span> {hardcodedMetrics.avgResponseTime}</p>
+          <p className="text-gray-700 mb-2"><span className="font-semibold">FCR Rate:</span> {hardcodedMetrics.fcrRate}</p>
+          <p className="text-gray-700"><span className="font-semibold">CSAT Score:</span> {hardcodedMetrics.csatScore}</p>
         </div>
 
-        {/* CSAT Score Panel */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold text-blue-700 mb-4">CSAT Score</h2>
-          <p className="text-4xl font-bold text-gray-800">{hardcodedMetrics.csatScore}</p>
-          <p className="text-gray-600">Customer Satisfaction</p>
+        {/* Emerging Trends (Derived from Hardcoded Data) */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+          <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
+             <PieChart className="w-6 h-6 mr-2 text-blue-600"/> Emerging Trends
+          </h2>
+          <p className="text-gray-700 mb-2 font-semibold">Most Frequent Issues:</p>
+          {insights.mostFrequentIssues.length > 0 ? (
+            <ul className="list-disc list-inside text-gray-600">
+              {insights.mostFrequentIssues.map((item, index) => (
+                <li key={index}>{item.issue} ({item.count})</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500 italic text-sm">Analyzing ticket data for trends...</p>
+          )}
         </div>
 
         {/* New vs Closed Tickets Chart Panel */}
-        <div className="bg-white p-6 rounded-lg shadow-md lg:col-span-2"> {/* Make this panel wider */}
+        <div className="bg-white p-6 rounded-lg shadow-md lg:col-span-2 border border-blue-200"> {/* Make this panel wider */}
            <div style={{ height: '300px' }}> {/* Give the chart container a fixed height */}
              <Bar data={hardcodedTicketData} options={chartOptions} />
            </div>
         </div>
 
-        {/* Placeholder for other reporting panels or features */}
-         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center text-gray-500 italic">
-             <h2 className="text-xl font-semibold text-blue-700 mb-4">Other Metrics</h2>
-             <p>Placeholder for more charts or data.</p>
-             {/* TODO: Add more reporting components here */}
+        {/* Predictive Insights (Placeholder) */}
+         <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200 flex flex-col justify-center items-center text-gray-500 italic">
+             <h2 className="text-xl font-semibold text-blue-700 mb-4 text-center flex items-center">
+                <Bell className="w-6 h-6 mr-2 text-blue-600"/> Predictive Insights
+             </h2>
+             <p className="text-center">
+                <span className="font-semibold not-italic text-blue-900">AI Prediction:</span>
+                <br/>Identify customers at risk of churn or needing proactive help.
+             </p>
+             <p className="text-center text-sm mt-2">(Requires AI/ML model integration)</p>
          </div>
+
+         {/* Customer Behavior Insights (Derived from Hardcoded Data) */}
+        <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
+          <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
+             <User className="w-6 h-6 mr-2 text-blue-600"/> Customer Behavior
+          </h2>
+          <p className="text-gray-700 mb-2 font-semibold">Products with Most Tickets:</p>
+           {insights.productsWithMostTickets.length > 0 ? (
+            <ul className="list-disc list-inside text-gray-600">
+              {insights.productsWithMostTickets.map((item, index) => (
+                <li key={index}>{item.product} ({item.count})</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500 italic text-sm">Analyzing product data...</p>
+          )}
+        </div>
 
 
       </div>
