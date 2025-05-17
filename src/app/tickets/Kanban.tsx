@@ -1,40 +1,72 @@
-// src/app/tickets/Kanban.tsx (This file contains the Kanban, AI Processing Modal, and Related Concerns below the Kanban board, always visible with default content)
+'use client';
+/**
+ * @module TicketManagementPage
+ * @description This component provides a Kanban-style interface for managing customer support tickets,
+ * integrating with Google Gemini for AI-powered assistance features like summarization,
+ * response suggestions, knowledge base lookup, and automated ticket assignment.
+ */
 
-'use client'; // This page uses client-side state and interactions
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+// Import React hooks: useState for state management, useMemo for memoization,
+// useEffect for side effects, useRef for mutable references.
 
-import React, { useState, useMemo, useEffect, useRef } from 'react'; // Import hooks
-import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge, ArrowDownRight)
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'; // Import Gemini library
-import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData'; // Import hardcoded data
+import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge } from 'lucide-react';
+// Import icons from lucide-react library for various UI elements.
+
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+// Import necessary classes from the Google Generative AI library.
+
+import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData';
+// Import hardcoded data arrays representing a knowledge base and departments with agents.
 
 
-// --- WARNING: SECURITY RISK ---
-// Your API key should NOT be used here for Gemini calls in the final real-time version.
-// Gemini calls should be made from your secure backend.
-// For this combined modal view, keeping it client-side as before, but the warning remains.
-// Replace with your actual API key or load from environment variables securely on the backend.
+/**
+ * @constant {string} apiKey
+ * @description The API key for accessing the Google Generative AI API.
+ * NOTE: This should ideally be loaded from an environment variable in a real application.
+ */
 const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM"; // Replace with your actual API key
 
 if (!apiKey) {
     console.error("NEXT_PUBLIC_GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
-    // You might want to display a user-facing error message if the key is missing
 }
 
-// Initialize the Generative Model (only if apiKey is available)
+/**
+ * @constant {GoogleGenerativeAI | null} genAI
+ * @description The initialized Google Generative AI client instance, or null if the API key is missing.
+ */
 const genAI = apiKey ? new GoogleGenerativeAI(apiKey) : null;
+
+/**
+ * @constant {GenerativeModel | null} model
+ * @description The generative model instance ('gemini-1.5-flash') obtained from the client,
+ * or null if the client could not be initialized.
+ */
 const model = genAI ? genAI.getGenerativeModel({ model: 'gemini-1.5-flash' }) : null; // Using gemini-1.5-flash
 
-
-// Helper function to format KB articles for the prompt
+/**
+ * @function formatKnowledgeBase
+ * @description Formats an array of knowledge base articles into a string for use in AI prompts.
+ * @param {typeof hardcodedKnowledgeBase} kb - The array of knowledge base articles.
+ * @returns {string} A formatted string representation of the knowledge base.
+ */
 const formatKnowledgeBase = (kb: typeof hardcodedKnowledgeBase) => {
     if (!kb || kb.length === 0) return "No knowledge base articles available.";
     return kb.map(article => `## ${article.title}\n${article.content}`).join('\n\n');
 };
 
-// Format the entire hardcoded KB for the prompt
+/**
+ * @constant {string} formattedKB
+ * @description A formatted string containing all hardcoded knowledge base articles.
+ */
 const formattedKB = formatKnowledgeBase(hardcodedKnowledgeBase);
 
-// Helper function to format departments/agents for the prompt
+/**
+ * @function formatDepartmentsForPrompt
+ * @description Formats an array of departments and their agents into a string for use in AI prompts.
+ * @param {typeof hardcodedDepartments} departments - The array of department objects.
+ * @returns {string} A formatted string representation of departments and agents.
+ */
 const formatDepartmentsForPrompt = (departments: typeof hardcodedDepartments) => {
      if (!departments || departments.length === 0) return "No departments available.";
      return departments.map(dept =>
@@ -42,29 +74,59 @@ const formatDepartmentsForPrompt = (departments: typeof hardcodedDepartments) =>
      ).join('\n\n');
 };
 
-// Format the entire hardcoded departments data for the prompt
+/**
+ * @constant {string} formattedDepartments
+ * @description A formatted string containing department and agent information for AI prompts.
+ */
 const formattedDepartments = formatDepartmentsForPrompt(hardcodedDepartments);
 
 
-// Declare SpeechRecognition globally to avoid TypeScript errors
+/**
+ * @global
+ * @description Declares the existence of Web Speech Recognition API interfaces on the `window` object.
+ */
 declare global {
     interface Window {
-        webkitSpeechRecognition: any;
-        SpeechRecognition: any;
+        webkitSpeechRecognition: any; // For Chrome/Safari
+        SpeechRecognition: any; // Standard
     }
 }
 
 
-// --- Hardcoded Data ---
-// This simulates data that would eventually come from your Supabase database
-
+/**
+ * @interface Message
+ * @description Defines the structure of a single message within a ticket conversation.
+ * @property {'Customer' | 'Agent'} sender - The sender of the message.
+ * @property {string} text - The content of the message.
+ * @property {string} timestamp - The ISO date string when the message was sent.
+ */
 interface Message {
     sender: 'Customer' | 'Agent';
     text: string;
     timestamp: string; // ISO date string
 }
 
-// MODIFIED: Added 'department' field to the Ticket interface
+/**
+ * @interface Ticket
+ * @description Defines the structure of a customer support ticket.
+ * @property {string} id - Unique identifier for the ticket.
+ * @property {string} subject - The subject or title of the ticket.
+ * @property {'New' | 'Open' | 'In Progress' | 'Pending' | 'Resolved' | 'Closed'} status - The current status of the ticket.
+ * @property {'Low' | 'Medium' | 'High' | 'Urgent'} priority - The priority level of the ticket.
+ * @property {string | null} assignedTo - The agent or team assigned to the ticket, or null if unassigned.
+ * @property {string} department - The department responsible for the ticket.
+ * @property {'Phone' | 'Email' | 'Chat' | 'Web Form' | 'Social Media' | 'Other'} channel - The communication channel through which the ticket was created.
+ * @property {string} createdAt - The ISO date string when the ticket was created.
+ * @property {string} updatedAt - The ISO date string when the ticket was last updated.
+ * @property {string} lastMessageAt - The ISO date string of the last message in the conversation.
+ * @property {string} [description] - A detailed description of the customer's issue (optional).
+ * @property {string} [publicNotes] - Notes visible to the customer (optional).
+ * @property {string} [privateNotes] - Internal notes for agents (optional).
+ * @property {Message[]} [conversation] - An array of messages representing the conversation history (optional).
+ * @property {'Within SLA' | 'Approaching SLA' | 'Breached SLA'} [slaStatus] - The current status relative to the Service Level Agreement (optional).
+ * @property {'None' | 'Level 1' | 'Level 2' | 'Level 3'} [escalationLevel] - The current escalation level (optional).
+ * @property {string | null} [mergedInto] - The ID of the ticket this one was merged into, or null (optional).
+ */
 interface Ticket {
   id: string;
   subject: string;
@@ -85,7 +147,11 @@ interface Ticket {
   mergedInto?: string | null; // ADDED: ID of the ticket this one was merged into
 }
 
-// ADDED: Hardcoded Interaction History (Universal for demo - distinct from conversation)
+/**
+ * @constant {Object[]} hardcodedInteractionHistory
+ * @description An array of hardcoded objects simulating historical interactions (emails, calls, notes)
+ * for demonstration purposes. This is distinct from the ticket conversation history.
+ */
 const hardcodedInteractionHistory = [
     { id: 1, type: 'Email Received', timestamp: '2023-10-26T10:00:00Z', summary: 'Customer reported login issue.' },
     { id: 2, type: 'Agent Note', timestamp: '2023-10-26T10:15:00Z', summary: 'Checked account status, no lockouts found.' },
@@ -95,19 +161,36 @@ const hardcodedInteractionHistory = [
     // Add more sample history entries as needed
 ];
 
-// Add a helper function to format dates nicely for display
+/**
+ * @function formatHistoryDate
+ * @description Formats an ISO date string into a locale-specific date and time string.
+ * @param {string} dateString - The ISO date string to format.
+ * @returns {string} The formatted date and time string.
+ */
 const formatHistoryDate = (dateString: string) => {
     return new Date(dateString).toLocaleString();
 };
 
-// Helper function to extract department from assignedTo string (e.g., "Technical Support - Agent A")
+/**
+ * @function getDepartmentFromAssignment
+ * @description Extracts the department name from a string in the format "Department - Agent Name".
+ * @param {string | null} assignedTo - The assignedTo string or null.
+ * @returns {string} The extracted department name, or 'Unassigned' if null or not parseable.
+ */
 const getDepartmentFromAssignment = (assignedTo: string | null): string => {
     if (!assignedTo) return 'Unassigned';
     const parts = assignedTo.split(' - ');
     return parts[0].trim() || 'Unassigned';
 };
 
-// ADDED: Simple helper to check for keyword similarity (can be made more sophisticated)
+/**
+ * @function isTicketRelated
+ * @description Performs a simple check to see if two tickets are related based on keywords in their subjects.
+ * In a real application, this would use more sophisticated methods.
+ * @param {Ticket} ticket1 - The first ticket object.
+ * @param {Ticket} ticket2 - The second ticket object.
+ * @returns {boolean} True if the tickets are considered related based on keywords, false otherwise.
+ */
 const isTicketRelated = (ticket1: Ticket, ticket2: Ticket): boolean => {
     // A simple check: if subjects contain similar keywords (case-insensitive)
     // In a real application, you'd use more advanced text similarity or tagging.
@@ -115,14 +198,16 @@ const isTicketRelated = (ticket1: Ticket, ticket2: Ticket): boolean => {
 
     const subject1 = ticket1.subject.toLowerCase();
     const subject2 = ticket2.subject.toLowerCase();
-
     // Check for overlap of significant terms
-    const significantTerms = ['login', 'account', 'access', 'password', 'issue', 'problem', 'cannot', 'can\'t']; // Add more relevant terms
+    const significantTerms = ['login', 'account', 'access', 'password', 'issue', 'problem', 'cannot', 'can\'t'];
+     // Add more relevant terms
      return significantTerms.some(term => subject1.includes(term) && subject2.includes(term));
 };
 
-
-// MODIFIED: Added 'department' field to initialTickets data
+/**
+ * @constant {Ticket[]} initialTickets
+ * @description An array of hardcoded objects representing the initial set of customer support tickets.
+ */
 const initialTickets: Ticket[] = [
   {
     id: 'T001',
@@ -167,7 +252,7 @@ const initialTickets: Ticket[] = [
     escalationLevel: 'None', // ADDED Sample Escalation Level
   },
    {
-    id: 'T003',
+     id: 'T003',
     subject: 'Product feature request',
     status: 'Open',
     priority: 'Low',
@@ -258,7 +343,7 @@ const initialTickets: Ticket[] = [
   },
     // ADDED: More tickets related to login issues for demonstration
     {
-        id: 'T008',
+         id: 'T008',
         subject: 'Cannot access my account after password reset',
         status: 'New',
         priority: 'High',
@@ -312,9 +397,11 @@ const initialTickets: Ticket[] = [
         escalationLevel: 'None',
     },
 ];
-// --- End Hardcoded Data ---
 
-// --- Helper for Status Colors (Tailwind classes) ---
+/**
+ * @constant {Record<Ticket['status'], string>} statusColors
+ * @description Maps ticket statuses to Tailwind CSS background and text color classes.
+ */
 const statusColors: Record<Ticket['status'], string> = {
   'New': 'bg-blue-100 text-blue-800',
   'Open': 'bg-green-100 text-green-800',
@@ -324,7 +411,10 @@ const statusColors: Record<Ticket['status'], string> = {
   'Closed': 'bg-gray-200 text-gray-800',
 };
 
-// --- Helper for Priority Colors (Tailwind classes) ---
+/**
+ * @constant {Record<Ticket['priority'], string>} priorityColors
+ * @description Maps ticket priorities to Tailwind CSS text color and font weight classes.
+ */
 const priorityColors: Record<Ticket['priority'], string> = {
   'Low': 'text-green-600 font-medium',
   'Medium': 'text-yellow-600 font-semibold', // Changed Medium to semibold for better distinction
@@ -332,18 +422,31 @@ const priorityColors: Record<Ticket['priority'], string> = {
   'Urgent': 'text-red-600 font-extrabold', // Changed Urgent to extrabold
 };
 
-// ADDED: Helper for SLA Colors (Tailwind classes)
+/**
+ * @constant {Record<NonNullable<Ticket['slaStatus']>, string>} slaColors
+ * @description Maps SLA statuses to Tailwind CSS text color classes.
+ */
 const slaColors: Record<NonNullable<Ticket['slaStatus']>, string> = {
     'Within SLA': 'text-green-600',
     'Approaching SLA': 'text-yellow-600',
     'Breached SLA': 'text-red-600',
 };
 
-
-// Define the order of columns/statuses for the Kanban board
+/**
+ * @constant {Ticket['status'][]} kanbanStatuses
+ * @description Defines the ordered list of ticket statuses used to create the Kanban columns.
+ */
 const kanbanStatuses: Ticket['status'][] = ['New', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
 
-// ADDED: Helper function to add a new hardcoded ticket with AI assignment
+/**
+ * @function addNewHardcodedTicket
+ * @description Simulates adding a new hardcoded ticket to the state, potentially with AI-based department/agent assignment.
+ * In a real application, this would interact with a backend API.
+ * @param {React.Dispatch<React.SetStateAction<Ticket[]>>} setTickets - The state setter function for tickets.
+ * @param {GenerativeModel | null} model - The GenerativeModel instance for AI assignment, or null.
+ * @param {string} [initialConcern='Automated transcription: Customer called with a general inquiry.'] - The initial customer concern text.
+ * @async
+ */
 const addNewHardcodedTicket = async (setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>, model: GenerativeModel | null, initialConcern: string = 'Automated transcription: Customer called with a general inquiry.') => {
     // ...
      // Generate a more robust unique ID for demo purposes
@@ -356,8 +459,7 @@ const addNewHardcodedTicket = async (setTickets: React.Dispatch<React.SetStateAc
      if (model) {
          try {
              // --- Prompt Gemini for Automated Assignment ---
-             const assignmentPrompt = `Analyze the following customer concern and assign it to the most appropriate department and agent from the list provided.
-Return ONLY the assigned department and agent in the format: Department: [Department Name], Agent: [Agent Name]. If no specific agent seems appropriate, just return the department (e.g., Department: [Department Name], Agent: Unassigned). If the concern does not fit any department, return Department: Other, Agent: Unassigned.
+             const assignmentPrompt = `Analyze the following customer concern and assign it to the most appropriate department and agent from the list provided. Return ONLY the assigned department and agent in the format: Department: [Department Name], Agent: [Agent Name]. If no specific agent seems appropriate, just return the department (e.g., Department: [Department Name], Agent: Unassigned). If the concern does not fit any department, return Department: Other, Agent: Unassigned.
 
 Customer Concern:
 "${initialConcern}"
@@ -365,7 +467,6 @@ Customer Concern:
 Available Departments and Agents:
 ${formattedDepartments}
 `;
-
              console.log('Calling Gemini API for assignment with prompt:', assignmentPrompt);
 
              const result = await model.generateContent(assignmentPrompt);
@@ -375,10 +476,8 @@ ${formattedDepartments}
              console.log('--- Gemini Assignment Response ---');
              console.log(assignmentText);
              console.log('---------------------------------');
-
              // Basic parsing of the assignment text (expecting "Department: ..., Agent: ...")
              const departmentMatch = assignmentText.match(/Department:\s*(.*?),\s*Agent:\s*(.*)/i);
-
              if (departmentMatch && departmentMatch[1] && departmentMatch[2]) {
                  const department = departmentMatch[1].trim();
                  const agent = departmentMatch[2].trim();
@@ -387,9 +486,9 @@ ${formattedDepartments}
 
                   // Optional: Validate if the assigned department/agent exists in your hardcoded data
                   const foundDept = hardcodedDepartments.find(d => d.name.toLowerCase() === department.toLowerCase());
-                   if (!foundDept) {
+                  if (!foundDept) {
                        console.warn(`Gemini assigned a department not in hardcoded list: ${department}`);
-                        // Fallback or handle unknown department
+                         // Fallback or handle unknown department
                          assignedDepartment = 'Other'; // Fallback department
                         assignedDepartmentAndAgent = `Other - ${agent}`;
                    } else if (agent.toLowerCase() !== 'unassigned' && !foundDept.agents.some(a => a.toLowerCase() === agent.toLowerCase())) {
@@ -401,13 +500,13 @@ ${formattedDepartments}
 
              } else {
                  console.warn('Could not parse assignment from Gemini response:', assignmentText);
-                  assignedDepartmentAndAgent = 'Assignment Failed'; // Indicate assignment failure
+                 assignedDepartmentAndAgent = 'Assignment Failed'; // Indicate assignment failure
                    assignedDepartment = 'Unassigned'; // Indicate assignment failure
              }
 
          } catch (error: any) {
              console.error('Error during AI assignment:', error);
-              assignedDepartmentAndAgent = 'Assignment Error'; // Indicate assignment error
+             assignedDepartmentAndAgent = 'Assignment Error'; // Indicate assignment error
                assignedDepartment = 'Unassigned'; // Indicate assignment error
          }
      } else {
@@ -433,78 +532,234 @@ ${formattedDepartments}
          slaStatus: 'Within SLA', // Default SLA status for new tickets
          escalationLevel: 'None', // Default escalation level
      };
-
      setTickets(prevTickets => [...prevTickets, simulatedNewTicket]);
      console.log('Simulating adding new ticket:', simulatedNewTicket);
-     alert(`New ticket ${newTicketId} automatically created! Assigned to: ${assignedDepartmentAndAgent}`); // Notify the agent
+     alert(`New ticket ${newTicketId} automatically created! Assigned to: ${assignedDepartmentAndAgent}`);
+     // Notify the agent
 };
 
 
+/**
+ * @function TicketManagementPage
+ * @description The main React functional component for the ticket management dashboard.
+ * It displays tickets in a Kanban board, provides modals for detailed view and creation,
+ * and integrates AI features for ticket processing and related concerns.
+ * @returns {React.ReactElement} The JSX element for the ticket management page.
+ */
 export default function TicketManagementPage() {
   // --- State for Ticket Data and UI Controls ---
+  /**
+   * @constant {Ticket[]} tickets
+   * @description The main state variable holding the array of all ticket objects.
+   */
   const [tickets, setTickets] = useState<Ticket[]>(initialTickets);
-  // Filter and Sort state can still be used, but might apply *within* columns or globally
+
+  /**
+   * @constant {string} filterStatus
+   * @description State variable for the global status filter applied to the Kanban board.
+   */
   const [filterStatus, setFilterStatus] = useState<string>('All'); // Global filter (optional for Kanban)
+
+  /**
+   * @constant {keyof Ticket} sortBy
+   * @description State variable for the field by which tickets are sorted within each column.
+   */
   const [sortBy, setSortBy] = useState<keyof Ticket>('createdAt'); // Field to sort by within columns
+
+  /**
+   * @constant {'asc' | 'desc'} sortOrder
+   * @description State variable for the sort order (ascending or descending).
+   */
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // asc or desc
+
+  /**
+   * @constant {boolean} isManualCreationModalOpen
+   * @description State variable to control the visibility of the manual ticket creation modal.
+   */
   const [isManualCreationModalOpen, setIsManualCreationModalOpen] = useState(false);
+
+  /**
+   * @constant {object} newTicketFormData
+   * @description State variable holding the data for the new ticket form inputs.
+   * @property {string} subject - The subject input value.
+   * @property {string} channel - The channel input value.
+   * @property {string} description - The description input value.
+   */
   const [newTicketFormData, setNewTicketFormData] = useState({ subject: '', channel: '', description: '' });
 
   // --- State for Detailed Ticket View Modal ---
+  /**
+   * @constant {string | null} selectedTicketId
+   * @description State variable holding the ID of the currently selected ticket for the detailed view modal, or null if no ticket is selected.
+   */
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null);
+
+  /**
+   * @constant {Ticket | undefined} selectedTicket
+   * @description A memoized value representing the full ticket object for the currently selected `selectedTicketId`.
+   * Recomputed whenever `selectedTicketId` or the `tickets` array changes.
+   */
   const selectedTicket = useMemo(() => {
       return tickets.find(ticket => ticket.id === selectedTicketId);
   }, [selectedTicketId, tickets]); // Recompute when selectedTicketId or tickets change
 
   // ADDED: State for editable notes in the modal
+    /**
+     * @constant {string} publicNotes
+     * @description State variable holding the public notes text in the detailed view modal.
+     */
     const [publicNotes, setPublicNotes] = useState('');
+
+    /**
+     * @constant {string} privateNotes
+     * @description State variable holding the private notes text in the detailed view modal.
+     */
     const [privateNotes, setPrivateNotes] = useState('');
 
     // ADDED: State for conversation history in the modal
+    /**
+     * @constant {Message[]} currentConversation
+     * @description State variable holding the conversation history for the currently selected ticket.
+     */
     const [currentConversation, setCurrentConversation] = useState<Message[]>([]);
 
     // ADDED: State for Merge feature UI
+    /**
+     * @constant {boolean} showMergeInput
+     * @description State variable to control the visibility of the ticket merge input field.
+     */
     const [showMergeInput, setShowMergeInput] = useState(false);
+
+    /**
+     * @constant {string} mergeTicketId
+     * @description State variable holding the ID entered by the user for merging tickets.
+     */
     const [mergeTicketId, setMergeTicketId] = useState('');
 
-
   // --- State for AI Processing (Moved from page.tsx) ---
+  /**
+   * @constant {string} clientConcern
+   * @description State variable holding the customer concern text entered or transcribed for AI processing.
+   */
   const [clientConcern, setClientConcern] = useState('');
+
+  /**
+   * @constant {boolean} isProcessing
+   * @description State variable indicating whether the AI processing is currently in progress.
+   */
   const [isProcessing, setIsProcessing] = useState(false);
+
+  /**
+   * @constant {string} summary
+   * @description State variable holding the AI-generated summary of the client concern.
+   */
   const [summary, setSummary] = useState('');
+
+  /**
+   * @constant {string[]} suggestedReplies
+   * @description State variable holding the AI-generated list of suggested replies.
+   */
   const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+
+  /**
+   * @constant {typeof hardcodedKnowledgeBase} suggestedKB
+   * @description State variable holding the list of suggested knowledge base articles based on AI processing.
+   */
   const [suggestedKB, setSuggestedKB] = useState<typeof hardcodedKnowledgeBase>([]);
+
+  /**
+   * @constant {string} composeReply
+   * @description State variable holding the text being composed in the agent reply area.
+   */
   const [composeReply, setComposeReply] = useState('');
+
+  /**
+   * @constant {string | null} processingError
+   * @description State variable holding any error message that occurred during AI processing.
+   */
   const [processingError, setProcessingError] = useState<string | null>(null);
 
-   // ADDED: State for call simulation popup
+  // ADDED: State for call simulation popup
+    /**
+     * @constant {boolean} showIncomingCallPopup
+     * @description State variable to control the visibility of the incoming call simulation popup.
+     */
     const [showIncomingCallPopup, setShowIncomingCallPopup] = useState(false);
+
+    /**
+     * @constant {'ringing' | 'ai_answering' | null} callSimulationPhase
+     * @description State variable tracking the current phase of the simulated incoming call.
+     */
     const [callSimulationPhase, setCallSimulationPhase] = useState<'ringing' | 'ai_answering' | null>(null);
+
+    /**
+     * @constant {React.MutableRefObject<NodeJS.Timeout | null>} callTimerRef
+     * @description A ref to hold the ID of the timer used for simulating call phases.
+     */
     const callTimerRef = useRef<NodeJS.Timeout | null>(null); // Use useRef for the timer ID
 
   // --- State for Actual Speech-to-Text (Moved from page.tsx) ---
+  /**
+   * @constant {boolean} isRecording
+   * @description State variable indicating whether speech-to-text recording is active.
+   */
   const [isRecording, setIsRecording] = useState(false);
+
+  /**
+   * @constant {string | null} sttError
+   * @description State variable holding any error message that occurred during speech-to-text.
+   */
   const [sttError, setSttError] = useState<string | null>(null);
+
+  /**
+   * @constant {string} interimTranscript
+   * @description State variable holding the current interim (not yet finalized) transcript from speech-to-text.
+   */
   const [interimTranscript, setInterimTranscript] = useState(''); // State to hold interim results
+
+  /**
+   * @constant {boolean} isSTTReady
+   * @description State variable indicating whether the Speech-to-Text API is initialized and ready.
+   */
   const [isSTTReady, setIsSTTReady] = useState(false); // Track if STT API is initialized
 
-  // Use useRef to hold the SpeechRecognition instance (Moved from page.tsx)
-  const recognitionRef = useRef<any | null>(null);
+  /**
+   * @constant {React.MutableRefObject<any | null>} recognitionRef
+   * @description A ref to hold the SpeechRecognition instance.
+   */
+  const recognitionRef = useRef<any | null>(null); // Use useRef to hold the SpeechRecognition instance (Moved from page.tsx)
 
     // --- State for Related Concerns ---
+    /**
+     * @constant {string[]} selectedRelatedTicketIds
+     * @description State variable holding the IDs of related tickets currently selected for bulk actions.
+     */
     const [selectedRelatedTicketIds, setSelectedRelatedTicketIds] = useState<string[]>([]);
+
+    /**
+     * @constant {boolean} isSendingBulkReply
+     * @description State variable indicating if a bulk reply is currently being sent.
+     */
     const [isSendingBulkReply, setIsSendingBulkReply] = useState(false);
+
+    /**
+     * @constant {string | null} bulkReplyStatus
+     * @description State variable holding the status message for a bulk reply action.
+     */
     const [bulkReplyStatus, setBulkReplyStatus] = useState<string | null>(null);
 
-
   // ADDED: Handle simulating an incoming call
+ /**
+  * @function handleSimulateIncomingCall
+  * @description Initiates a simulation of an incoming phone call, showing a popup
+  * and eventually creating a new ticket with potential AI assignment.
+  */
  const handleSimulateIncomingCall = () => {
      if (showIncomingCallPopup) return; // Prevent multiple popups
 
      setShowIncomingCallPopup(true);
      setCallSimulationPhase('ringing');
      console.log('Simulating incoming call...');
-
      // Sample initial customer concern for the automated ticket
       const sampleInitialConcern = "I have a problem with my app crashing every time I try to open the settings."; // Example tech issue
       // const sampleInitialConcern = "My last invoice seems incorrect, I was charged more than expected."; // Example billing issue
@@ -528,6 +783,10 @@ export default function TicketManagementPage() {
  };
 
  // ADDED: Cleanup timer on component unmount
+ /**
+  * @effect
+  * @description Cleans up the call simulation timer when the component unmounts to prevent memory leaks.
+  */
  useEffect(() => {
      return () => {
          if (callTimerRef.current) {
@@ -539,6 +798,13 @@ export default function TicketManagementPage() {
 
   // --- Effect to Initialize SpeechRecognition (Moved from page.tsx) ---
   // This effect will now run when the Kanban component mounts.
+  /**
+   * @effect
+   * @description Initializes the Web Speech Recognition API when the component mounts.
+   * Sets up event handlers for start, result, error, and end events.
+   * Handles browser compatibility and microphone permission errors.
+   * Cleans up the recognition instance on unmount.
+   */
   useEffect(() => {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -586,7 +852,6 @@ export default function TicketManagementPage() {
 
               // Always update interim transcript state for display
               setInterimTranscript(currentInterimTranscript);
-
                // Optional: Automatically scroll the textarea
                const textarea = document.getElementById('client-concern-textarea') as HTMLTextAreaElement | null;
                 if (textarea) {
@@ -596,7 +861,7 @@ export default function TicketManagementPage() {
 
           recognitionRef.current.onerror = (event: any) => {
               console.error('Speech recognition error:', event.error);
-               let errorMessage = "An error occurred during speech recognition.";
+              let errorMessage = "An error occurred during speech recognition.";
                switch (event.error) {
                    case 'not-allowed':
                    case 'permission-denied':
@@ -604,12 +869,12 @@ export default function TicketManagementPage() {
                        break;
                    case 'no-speech':
                         console.log("No speech detected in this segment (in continuous mode).");
-                         return; // Don't stop recording for 'no-speech'
+                        return; // Don't stop recording for 'no-speech'
                     case 'audio-capture':
                          errorMessage = "Could not start audio capture. Ensure microphone is available.";
                          setIsRecording(false); // Stop recording on critical error
                          break;
-                   default:
+                    default:
                        errorMessage += ` (Error: ${event.error})`;
                        setIsRecording(false); // Stop recording on other errors
                }
@@ -626,8 +891,7 @@ export default function TicketManagementPage() {
           };
 
           setIsSTTReady(true);
-
-      } catch (error: any) {
+           } catch (error: any) {
            console.error("Error initializing Speech Recognition:", error);
            setSttError(`Error initializing Speech Recognition: ${error.message || 'Unknown error'}`);
            setIsSTTReady(true);
@@ -644,6 +908,13 @@ export default function TicketManagementPage() {
 
 
     // --- Effect to Load Ticket Data, Notes, and Conversation into Modal Sections ---
+    /**
+     * @effect
+     * @description Populates the modal's state (client concern, notes, conversation) when a ticket is selected.
+     * Clears AI processing state and related concerns state when the modal is closed.
+     * Ensures speech recording is stopped when the modal state changes.
+     * Runs whenever `selectedTicket` changes.
+     */
     useEffect(() => {
         if (selectedTicket) {
             // When a ticket is selected, populate the client concern with its description
@@ -690,39 +961,74 @@ export default function TicketManagementPage() {
 
 
   // --- Event Handlers (Kanban Specific) ---
+  /**
+   * @function handleFilterChange
+   * @description Handles changes to the global status filter select input.
+   * @param {React.ChangeEvent<HTMLSelectElement>} event - The change event from the select element.
+   */
   const handleFilterChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setFilterStatus(event.target.value);
   };
 
+  /**
+   * @function handleSortChange
+   * @description Handles changes to the sort field select input or the sort order button.
+   * Toggles sort order if the same field is selected again.
+   * @param {keyof Ticket} field - The field to sort the tickets by.
+   */
   const handleSortChange = (field: keyof Ticket) => {
     const order = sortBy === field && sortOrder === 'desc' ? 'asc' : 'desc'; // Toggle order
     setSortBy(field);
     setSortOrder(order);
   };
 
-  // MODIFIED: handleTicketClick to also set selectedTicketId for the modal
+  /**
+   * @function handleTicketClick
+   * @description Handles clicks on individual ticket cards in the Kanban board.
+   * Sets the selected ticket ID to open the detailed view modal.
+   * @param {string} ticketId - The ID of the clicked ticket.
+   */
   const handleTicketClick = (ticketId: string) => {
       console.log("Ticket clicked:", ticketId); // ADDED: Console log to verify click
       // Set the selected ticket ID to open the modal AND trigger related concerns section
       setSelectedTicketId(ticketId);
   };
 
-
+  /**
+   * @function handleDetailedViewClose
+   * @description Handles closing the detailed ticket view modal.
+   * Clears the selected ticket ID, which triggers the useEffect to reset modal-specific state.
+   */
   const handleDetailedViewClose = () => {
       // Close the modal by clearing the selected ticket ID
       setSelectedTicketId(null);
-       // The useEffect for selectedTicket handles clearing AI state and related concerns state
+      // The useEffect for selectedTicket handles clearing AI state and related concerns state
   };
 
-
-  const handleStatusChange = (ticketId: string, newStatus: Ticket['status']) => {
+  /**
+   * @function handleStatusChange
+   * @description Simulates changing the status of a ticket.
+   * Updates the ticket status and `updatedAt` timestamp in the state.
+   * In a real application, this would call a backend API.
+   * @param {string} ticketId - The ID of the ticket to update.
+   * @param {Ticket['status']} newStatus - The new status for the ticket.
+   */
+   const handleStatusChange = (ticketId: string, newStatus: Ticket['status']) => {
       // TODO: Replace with backend API call to update status in Supabase
       setTickets(tickets.map(ticket =>
           ticket.id === ticketId ? { ...ticket, status: newStatus, updatedAt: new Date().toISOString() } : ticket
       ));
-       console.log(`Simulating status change for ${ticketId} to ${newStatus}`);
+      console.log(`Simulating status change for ${ticketId} to ${newStatus}`);
   };
 
+   /**
+    * @function handleAssignChange
+    * @description Simulates changing the assigned agent/team for a ticket.
+    * Updates the `assignedTo` and `department` fields and the `updatedAt` timestamp in the state.
+    * In a real application, this would call a backend API.
+    * @param {string} ticketId - The ID of the ticket to update.
+    * @param {string | null} newAssignee - The new assignee string or null.
+    */
    const handleAssignChange = (ticketId: string, newAssignee: string | null) => {
       // TODO: Replace with backend API call to update assignment in Supabase
       // Also update the department field based on the new assignee
@@ -733,17 +1039,34 @@ export default function TicketManagementPage() {
       console.log(`Simulating assignment change for ${ticketId} to ${newAssignee}. Department updated to ${newDepartment}`);
    };
 
-
   // --- Manual Ticket Creation ---
+  /**
+   * @function handleManualCreateClick
+   * @description Opens the manual ticket creation modal.
+   */
    const handleManualCreateClick = () => {
        setIsManualCreationModalOpen(true);
    };
 
+   /**
+    * @function handleManualFormChange
+    * @description Handles input changes in the manual ticket creation form.
+    * Updates the `newTicketFormData` state.
+    * @param {React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>} e - The change event from the input element.
+    */
    const handleManualFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
        const { name, value } = e.target;
        setNewTicketFormData(prevState => ({ ...prevState, [name]: value }));
    };
 
+   /**
+    * @function handleManualFormSubmit
+    * @description Handles the submission of the manual ticket creation form.
+    * Simulates creating a new ticket and adding it to the state.
+    * Resets the form and closes the modal.
+    * In a real application, this would call a backend API.
+    * @param {React.FormEvent<HTMLFormElement>} e - The form submission event.
+    */
    const handleManualFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
        e.preventDefault();
        // TODO: Replace with backend API call to create ticket in Supabase
@@ -768,19 +1091,29 @@ export default function TicketManagementPage() {
            lastMessageAt: now,
            description: newTicketFormData.description, // Include description
        };
-
        setTickets([...tickets, brandNewTicket]);
        console.log('Simulating creating new ticket:', brandNewTicket);
        setNewTicketFormData({ subject: '', channel: '', description: '' }); // Reset form
        setIsManualCreationModalOpen(false); // Close modal
    };
 
+   /**
+    * @function handleManualModalClose
+    * @description Closes the manual ticket creation modal and resets the form data.
+    */
    const handleManualModalClose = () => {
        setIsManualCreationModalOpen(false);
        setNewTicketFormData({ subject: '', channel: '', description: '' }); // Reset form on close
    }
 
     // --- Sorting Logic (Corrected for potential nulls) ---
+    /**
+     * @function sortTickets
+     * @description Sorts an array of tickets based on the current `sortBy` field and `sortOrder`.
+     * Handles null values and different data types (string, number, date).
+     * @param {Ticket[]} ticketsToSort - The array of tickets to sort.
+     * @returns {Ticket[]} A new array containing the sorted tickets.
+     */
     const sortTickets = (ticketsToSort: Ticket[]) => {
         return [...ticketsToSort].sort((a, b) => {
             const aValue = a[sortBy];
@@ -819,14 +1152,24 @@ export default function TicketManagementPage() {
         });
     };
 
-
     // ADDED: Handle Merging Tickets
+    /**
+     * @function handleMergeTickets
+     * @description Initiates the ticket merging process by showing the merge input field in the modal.
+     */
     const handleMergeTickets = () => {
         if (!selectedTicket) return;
         setShowMergeInput(true); // Show the merge input field
     };
 
     // ADDED: Handle Confirm Merge
+    /**
+     * @function handleConfirmMerge
+     * @description Handles the confirmation of merging the currently selected ticket into another ticket.
+     * Simulates merging data and removing the source ticket from the state.
+     * In a real application, this would call a backend API.
+     * @fires {Alert} Displays alerts for validation and simulated completion/errors.
+     */
     const handleConfirmMerge = () => {
         if (!selectedTicket || !mergeTicketId.trim()) {
             alert("Please select a ticket and enter a ticket ID to merge into.");
@@ -834,7 +1177,6 @@ export default function TicketManagementPage() {
         }
 
         const targetTicket = tickets.find(t => t.id === mergeTicketId.trim());
-
         if (!targetTicket) {
             alert(`Ticket ID "${mergeTicketId.trim()}" not found.`);
             return;
@@ -847,7 +1189,6 @@ export default function TicketManagementPage() {
 
         // TODO: Implement actual merge logic (combine conversations, notes, update status, etc.)
         console.log(`Simulating merging ticket ${selectedTicket.id} into ${targetTicket.id}`);
-
         // Simulate updating the merged ticket and removing the current one
         setTickets(prevTickets => prevTickets.map(ticket => {
             if (ticket.id === targetTicket.id) {
@@ -878,19 +1219,23 @@ export default function TicketManagementPage() {
     };
 
     // ADDED: Handle Escalating Ticket
+    /**
+     * @function handleEscalateTicket
+     * @description Simulates escalating the currently selected ticket.
+     * Changes the priority, updates the escalation level, and adds a note.
+     * In a real application, this would call a backend API and potentially trigger notifications.
+     * @fires {Alert} Displays an alert indicating the simulated escalation.
+     */
     const handleEscalateTicket = () => {
         if (!selectedTicket) return;
-
         // TODO: Implement escalation logic (update status, priority, notify team, etc.)
         console.log(`Simulating escalating ticket ${selectedTicket.id}`);
-
         // Simulate changing priority and adding a note
         const escalatedPriority = selectedTicket.priority === 'Low' ? 'Medium' :
                                   selectedTicket.priority === 'Medium' ? 'High' :
                                   selectedTicket.priority === 'High' ? 'Urgent' : 'Urgent';
 
         const escalationNote = `Ticket escalated to ${escalatedPriority} priority.`;
-
         setTickets(prevTickets => prevTickets.map(ticket => {
             if (ticket.id === selectedTicket.id) {
                  const updatedPrivateNotes = `${ticket.privateNotes || ''}\n${new Date().toLocaleString()}: ${escalationNote}`;
@@ -908,17 +1253,24 @@ export default function TicketManagementPage() {
             }
             return ticket;
         }));
-
         alert(`Ticket ${selectedTicket.id} escalated to ${escalatedPriority} priority (simulated)!`);
         // Optionally keep modal open or close it
     };
 
-
   // --- Handle Processing with Direct Gemini Call (Moved from page.tsx) ---
-    const handleProcessTicket = async () => {
+  /**
+   * @function handleProcessTicket
+   * @description Handles the click event for the "Process Ticket" button.
+   * Calls the Google Gemini model to generate a summary, suggested replies,
+   * and relevant knowledge base articles based on the `clientConcern` text.
+   * Updates the UI state with the AI-generated results.
+   * Handles errors during the AI call.
+   * @async
+   * @fires {Alert} Displays an alert if no text is available to process or the AI model is not configured.
+   */
+  const handleProcessTicket = async () => {
         // Use the combined text for processing from the modal's input
         const textToProcess = clientConcern + interimTranscript;
-
         if (!textToProcess.trim()) {
             alert('Please enter client concern text to process.');
             return;
@@ -942,7 +1294,6 @@ export default function TicketManagementPage() {
 1.  A concise summary of the customer's concern.
 2.  2-3 empathetic and helpful suggested replies for an agent to use.
 3.  A list of relevant articles from the provided knowledge base.
-
 Format your response using the exact section headers:
 **Summary:**
 **Suggested Replies:**
@@ -966,7 +1317,6 @@ ${formattedKB}
             console.log('--- Raw Gemini Response Text ---');
             console.log(text);
             console.log('-------------------------------');
-
             // --- Parse Gemini's Response (Your existing parsing logic) ---
             let currentSummary = '';
             let currentReplies: string[] = [];
@@ -990,13 +1340,13 @@ ${formattedKB}
             if (repliesIndex !== -1) {
                 const repliesContentEndIndex = (kbIndex !== -1) ? kbIndex : text.length;
                  const rawRepliesText = text.substring(repliesIndex + text.match(repliesHeaderRegex)![0].length, repliesContentEndIndex).trim();
-                currentReplies = rawRepliesText.split('\n')
+                 currentReplies = rawRepliesText.split('\n')
                      .map(line => line.trim())
                      .filter(line => line.length > 0)
                      .map(line => line.replace(/^[*-]?\s*/, '').trim());
-             } else {
+            } else {
                  console.warn('Could not find Suggested Replies section header.');
-             }
+            }
 
             if (kbIndex !== -1) {
                  const rawKbText = text.substring(kbIndex + text.match(kbHeaderRegex)![0].length).trim();
@@ -1045,7 +1395,14 @@ ${formattedKB}
         }
     };
 
-    // --- Handler to Start/Stop Speech-to-Text (Moved from page.tsx) ---
+  // --- Handler to Start/Stop Speech-to-Text (Moved from page.tsx) ---
+    /**
+     * @function handleToggleSpeechToText
+     * @description Toggles the start and stop states of the Web Speech Recognition API.
+     * Updates recording state and handles initialization/errors.
+     * Appends final transcripts to the `clientConcern`.
+     * @fires {Alert} Displays an alert if the Speech Recognition API is not initialized or supported.
+     */
     const handleToggleSpeechToText = () => {
         if (!recognitionRef.current) {
              console.error("Speech Recognition API is not initialized or supported.");
@@ -1066,12 +1423,22 @@ ${formattedKB}
         }
     };
 
-     // Function to clear compose reply area (Moved from page.tsx)
+     /**
+      * @function handleClearCompose
+      * @description Clears the text in the compose reply area.
+      */
     const handleClearCompose = () => {
         setComposeReply('');
     };
 
-     // ADDED: Function to handle sending an agent's reply and update conversation
+     /**
+      * @function handleSendAgentReply
+      * @description Simulates sending an agent's reply.
+      * Adds the composed message to the `currentConversation` state and updates the ticket in the main `tickets` state.
+      * Clears the compose reply area.
+      * In a real application, this would send the message via a communication channel and update the backend.
+      * @fires {Alert} Displays an alert if the reply area is empty.
+      */
     const handleSendAgentReply = () => {
         if (!composeReply.trim()) {
             alert('Please type a reply to send.');
@@ -1087,7 +1454,6 @@ ${formattedKB}
             text: composeReply.trim(),
             timestamp: new Date().toISOString(),
         };
-
         // Update the local conversation state
         setCurrentConversation(prevConversation => [...prevConversation, agentMessage]);
         console.log("Added agent message to conversation:", agentMessage);
@@ -1098,7 +1464,6 @@ ${formattedKB}
                 ? { ...ticket, conversation: [...(ticket.conversation || []), agentMessage], updatedAt: new Date().toISOString(), lastMessageAt: new Date().toISOString() }
                 : ticket
         ));
-
         // Clear the compose reply area
         setComposeReply('');
         console.log("Reply sent (simulated) and compose area cleared.");
@@ -1111,20 +1476,38 @@ ${formattedKB}
     };
 
 
-    // Function to populate compose reply with a suggestion (Moved from page.tsx)
+    /**
+     * @function handleSuggestionClick
+     * @description Populates the compose reply area with the text of a clicked response suggestion.
+     * @param {string} suggestion - The suggested reply text.
+     */
     const handleSuggestionClick = (suggestion: string) => {
         setComposeReply(suggestion);
     };
 
     // --- Related Concerns Logic ---
-    // Handle checkbox change for selecting related tickets
+    /**
+     * @function handleRelatedCheckboxChange
+     * @description Handles the change event of the checkbox for selecting a related ticket.
+     * Adds or removes the ticket ID from the `selectedRelatedTicketIds` state.
+     * @param {string} ticketId - The ID of the related ticket.
+     * @param {boolean} isChecked - The checked state of the checkbox.
+     */
     const handleRelatedCheckboxChange = (ticketId: string, isChecked: boolean) => {
         setSelectedRelatedTicketIds(prevIds =>
             isChecked ? [...prevIds, ticketId] : prevIds.filter(id => id !== ticketId)
         );
     };
 
-    // Handle sending bulk tailored response (simulated)
+    /**
+     * @function handleSendBulkTailoredResponse
+     * @description Simulates sending a bulk tailored response to the selected related tickets.
+     * Uses the AI model to draft a response based on the original ticket's context.
+     * Updates UI state to show processing and status.
+     * In a real application, this would integrate with a communication platform (CPaaS) and potentially tailor responses individually.
+     * @async
+     * @fires {Alert} Displays alerts for validation and simulated completion/errors.
+     */
     const handleSendBulkTailoredResponse = async () => {
         if (selectedRelatedTicketIds.length === 0) {
             alert('Please select at least one related ticket to send a tailored response.');
@@ -1138,12 +1521,10 @@ ${formattedKB}
 
         setIsSendingBulkReply(true);
         setBulkReplyStatus(null);
-
         // In a real application, you would iterate through selectedRelatedTicketIds,
         // fetch details for each ticket, potentially use Gemini to tailor a response
         // based on the original ticket's context and the related ticket's context,
         // and then send the response via your communication channel (email, chat, etc.).
-
         console.log(`Simulating sending tailored response to ${selectedRelatedTicketIds.length} related tickets.`);
         console.log("Selected related ticket IDs:", selectedRelatedTicketIds);
         console.log("Context from original ticket:", selectedTicket?.subject, selectedTicket?.description); // Use optional chaining
@@ -1156,10 +1537,7 @@ ${formattedKB}
                  .filter(t => selectedRelatedTicketIds.includes(t.id))
                  .map(t => t.subject || `Ticket ${t.id}`)
                  .join(', ');
-
-             const tailoringPrompt = `Draft a brief, empathetic, and tailored response that an agent can send to multiple customers with similar concerns. The primary concern is related to: "${selectedTicket?.subject || selectedTicket?.description}". You are sending this reply to customers regarding tickets: ${relatedTicketSubjects}. Acknowledge the similar issue and provide a general update or initial troubleshooting step based on the original ticket's context.
-
-Keep the response concise and professional.`;
+             const tailoringPrompt = `Draft a brief, empathetic, and tailored response that an agent can send to multiple customers with similar concerns. The primary concern is related to: "${selectedTicket?.subject || selectedTicket?.description}". You are sending this reply to customers regarding tickets: ${relatedTicketSubjects}. Acknowledge the similar issue and provide a general update or initial troubleshooting step based on the original ticket's context. Keep the response concise and professional.`;
 
              console.log('Calling Gemini API for tailored bulk response draft:', tailoringPrompt);
 
@@ -1170,28 +1548,30 @@ Keep the response concise and professional.`;
              console.log('--- Gemini Tailored Reply Draft ---');
              console.log(tailoredReplyText);
              console.log('-----------------------------------');
-
              // --- Simulate Sending ---
              // In a real app, you'd use your CPaaS or email integration here
              // to send this tailoredReplyText to the customers associated with
              // the selectedRelatedTicketIds.
-
              setBulkReplyStatus(`Simulated sending tailored response to ${selectedRelatedTicketIds.length} tickets.`);
              alert(`Simulated sending tailored response to selected tickets:\n\n${tailoredReplyText}`);
-
              // Clear selected tickets after simulated sending
              setSelectedRelatedTicketIds([]);
-
-        } catch (error: any) {
+           } catch (error: any) {
             console.error('Error simulating bulk tailored response:', error);
             setBulkReplyStatus(`Error sending bulk response: ${error.message || 'Unknown error'}`);
             alert(`Error simulating sending bulk response: ${error.message || 'Unknown error'}`);
-        } finally {
+           } finally {
             setIsSendingBulkReply(false);
         }
     };
 
-    // Find and group related tickets
+    /**
+     * @constant {{ [department: string]: Ticket[] }} relatedTicketsByDepartment
+     * @description A memoized object grouping related tickets by department.
+     * Finds tickets related to the `selectedTicket` if one is selected, otherwise
+     * shows a hardcoded list of related tickets for demonstration.
+     * Recomputed when `selectedTicket` or `tickets` change.
+     */
     const relatedTicketsByDepartment = useMemo(() => {
         // If a ticket is selected, find tickets related to the selected one
         if (selectedTicket) {
@@ -1203,6 +1583,7 @@ Keep the response concise and professional.`;
                 // Check for relatedness using the helper function
                 isTicketRelated(selectedTicket, ticket)
             );
+
 
             // Group by department
             const grouped: { [department: string]: Ticket[] } = {};
@@ -1221,7 +1602,6 @@ Keep the response concise and professional.`;
             const hardcodedRelatedTickets = tickets.filter(ticket =>
                 hardcodedRelatedTicketIds.includes(ticket.id)
             );
-
              // Group the hardcoded tickets by department
              const grouped: { [department: string]: Ticket[] } = {};
              hardcodedRelatedTickets.forEach(ticket => {
@@ -1233,12 +1613,17 @@ Keep the response concise and professional.`;
              });
 
              return grouped;
-        }
+         }
     }, [selectedTicket, tickets]); // Recompute when selectedTicket or tickets change
 
 
   // --- Filtered and Sorted Tickets (Applied per status column) ---
-  const filteredTickets = useMemo(() => {
+    /**
+     * @constant {Ticket[]} filteredTickets
+     * @description A memoized array of tickets filtered based on the current `filterStatus`.
+     * Recomputed when `tickets` or `filterStatus` change.
+     */
+    const filteredTickets = useMemo(() => {
       let filtered = tickets;
       if (filterStatus !== 'All') {
           filtered = filtered.filter(ticket => ticket.status === filterStatus);
@@ -1246,8 +1631,10 @@ Keep the response concise and professional.`;
       return filtered;
   }, [tickets, filterStatus]);
 
-
   // --- Rendering ---
+  /**
+   * @returns {React.ReactElement} The JSX for the Ticket Management UI.
+   */
   return (
     // Main container with light blue background theme
     <div className="min-h-screen bg-blue-50 p-8">
@@ -1275,7 +1662,7 @@ Keep the response concise and professional.`;
 
       {/* Controls Area (Filter, Sort, Create) */}
       <div className="max-w-7xl mx-auto mb-6 bg-white p-4 rounded-lg shadow-md flex justify-between items-center">
-          <div className="flex items-center space-x-4">
+           <div className="flex items-center space-x-4">
               {/* Filter */}
               <div className="flex items-center">
                   <Filter className="w-5 h-5 text-gray-600 mr-2" />
@@ -1340,7 +1727,7 @@ Keep the response concise and professional.`;
                 <div key={status} className="w-80 flex-shrink-0 bg-white rounded-lg shadow-md p-4 flex flex-col"> {/* Fixed width column */}
                     {/* Column Header */}
                     <h2 className={`text-lg font-semibold mb-4 pb-2 text-black border-b ${statusColors[status].replace('bg-', 'border-').replace('text-', '')}`}> {/* Dynamic border color */}
-                        {status} ({filteredTickets.filter(ticket => ticket.status === status).length}) {/* Count tickets in this status */}
+                       {status} ({filteredTickets.filter(ticket => ticket.status === status).length}) {/* Count tickets in this status */}
                     </h2>
 
                     {/* Tickets in this column (Sorted) */}
@@ -1397,7 +1784,7 @@ Keep the response concise and professional.`;
                                 </div>
                             </div>
                         ))}
-                        {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).length === 0 && (
+                       {sortTickets(filteredTickets.filter(ticket => ticket.status === status)).length === 0 && (
                             <div className="text-center text-gray-500 italic py-4">
                                 No tickets in this status.
                             </div>
@@ -1429,7 +1816,7 @@ Keep the response concise and professional.`;
                           />
                       </div>
                        <div className="mb-4">
-                          <label htmlFor="channel" className="block text-gray-700 text-sm font-bold mb-2">Channel:</label>
+                         <label htmlFor="channel" className="block text-gray-700 text-sm font-bold mb-2">Channel:</label>
                           <select
                               id="channel"
                               name="channel"
@@ -1476,7 +1863,7 @@ Keep the response concise and professional.`;
               </div>
           </div>
       )}
-       {/* --- End Manual Ticket Creation Modal --- */}
+      {/* --- End Manual Ticket Creation Modal --- */}
 
        {/* Incoming Call Simulation Popup */}
         {showIncomingCallPopup && (
@@ -1520,7 +1907,7 @@ Keep the response concise and professional.`;
                 </div>
             </div>
         )}
-        {/* END ADDED: Incoming Call Simulation Popup */}
+     {/* END ADDED: Incoming Call Simulation Popup */}
 
 
        {/* --- Detailed Ticket View Modal (Including AI Processing and Conversation) --- */}
@@ -1544,28 +1931,28 @@ Keep the response concise and professional.`;
                        </div>
                        <div>
                             <p className="text-sm font-semibold text-gray-600">Status:</p>
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[selectedTicket.status]}`}>
+                           <span className={`px-2 py-1 text-xs font-semibold rounded-full ${statusColors[selectedTicket.status]}`}>
                                 {selectedTicket.status}
                             </span>
                        </div>
                         {/* MODIFIED: Priority Display to Dropdown */}
                         <div>
                             <p className="text-sm font-semibold text-gray-600">Priority:</p>
-                             <select
+                            <select
                                  value={selectedTicket.priority}
                                  onChange={(e) => {
                                      // Update the priority of the selected ticket in the main tickets state
                                      setTickets(tickets.map(t =>
                                          t.id === selectedTicket.id ? { ...t, priority: e.target.value as Ticket['priority'], updatedAt: new Date().toISOString() } : t
                                      ));
-                                      console.log(`Simulating priority change for ${selectedTicket.id} to ${e.target.value}`);
+                                     console.log(`Simulating priority change for ${selectedTicket.id} to ${e.target.value}`);
                                  }}
                                  className={`border rounded px-2 py-1 text-sm ${priorityColors[selectedTicket.priority]}`} // Apply priority color
                              >
-                                 {Object.keys(priorityColors).map(priorityOption => (
+                                {Object.keys(priorityColors).map(priorityOption => (
                                      <option key={priorityOption} value={priorityOption}>
                                          {priorityOption}
-                                     </option>
+                                      </option>
                                  ))}
                              </select>
                         </div>
@@ -1583,18 +1970,18 @@ Keep the response concise and professional.`;
                          <div>
                             <p className="text-sm font-semibold text-gray-600">Channel:</p>
                             <p className="text-gray-800">{selectedTicket.channel}</p>
-                        </div>
+                         </div>
                          <div>
                             <p className="text-sm font-semibold text-gray-600">Created At:</p>
-                            <p className="text-gray-800">{new Date(selectedTicket.createdAt).toLocaleString()}</p>
+                           <p className="text-gray-800">{new Date(selectedTicket.createdAt).toLocaleString()}</p>
                         </div>
                          <div>
                             <p className="text-sm font-semibold text-gray-600">Last Updated:</p>
-                            <p className="text-gray-800">{new Date(selectedTicket.updatedAt).toLocaleString()}</p>
+                           <p className="text-gray-800">{new Date(selectedTicket.updatedAt).toLocaleString()}</p>
                         </div>
                          {/* ADDED: SLA Status Display */}
                          <div>
-                             <p className="text-sm font-semibold text-gray-600">SLA Status:</p>
+                            <p className="text-sm font-semibold text-gray-600">SLA Status:</p>
                               {selectedTicket.slaStatus ? (
                                   <span className={`text-gray-800 ${slaColors[selectedTicket.slaStatus]}`}>
                                       {selectedTicket.slaStatus}
@@ -1608,11 +1995,11 @@ Keep the response concise and professional.`;
                          <div>
                              <p className="text-sm font-semibold text-gray-600">Escalation Level:</p>
                              <span className="text-gray-800">
-                                 {selectedTicket.escalationLevel || 'None'}
+                                {selectedTicket.escalationLevel || 'None'}
                              </span>
                          </div>
                          {/* END ADDED */}
-                          {/* ADDED: Merged Into Display */}
+                         {/* ADDED: Merged Into Display */}
                           {selectedTicket.mergedInto && (
                               <div>
                                    <p className="text-sm font-semibold text-gray-600">Merged Into:</p>
@@ -1621,13 +2008,13 @@ Keep the response concise and professional.`;
                                    </span>
                                </div>
                           )}
-                         {/* END ADDED */}
+                       {/* END ADDED */}
                    </div>
 
 
                    {/* --- AI Processing Area (Moved from page.tsx) + Conversation (5 Columns) --- */}
                    {/* Use the five-column grid structure inside the modal */}
-                    <main className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6"> {/* MODIFIED: lg:grid-cols-5 */}
+                   <main className="w-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-6"> {/* MODIFIED: lg:grid-cols-5 */}
 
                      {/* ADDED: First Column: Conversation History */}
                     <div className="flex flex-col gap-6 w-full lg:col-span-1"> {/* Explicitly set column span */}
@@ -1640,7 +2027,7 @@ Keep the response concise and professional.`;
                                         <div key={index} className={`flex ${message.sender === 'Agent' ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[80%] p-3 rounded-lg ${message.sender === 'Agent' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}`}>
                                                 <p className="text-sm">{message.text}</p>
-                                                <p className="text-xs text-right mt-1 opacity-80">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p> {/* Display time */}
+                                                 <p className="text-xs text-right mt-1 opacity-80">{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p> {/* Display time */}
                                             </div>
                                         </div>
                                     ))
@@ -1658,7 +2045,7 @@ Keep the response concise and professional.`;
                             <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                                  <h2 className="text-xl font-semibold text-blue-700 mb-4">Customer Ticket</h2>
                                  {sttError && ( // Display STT errors within the modal
-                                      <p className="text-red-600 mb-2">{sttError}</p>
+                                    <p className="text-red-600 mb-2">{sttError}</p>
                                  )}
                                  {/* Use clientConcern for the text area, append interim transcript */}
                                  <textarea
@@ -1668,17 +2055,17 @@ Keep the response concise and professional.`;
                                      // Display finalized transcript plus current interim result
                                      value={clientConcern + interimTranscript}
                                     onChange={(e) => {
-                                         // Only allow editing if not recording
+                                     // Only allow editing if not recording
                                          if (!isRecording) {
-                                              setClientConcern(e.target.value);
+                                             setClientConcern(e.target.value);
                                          }
                                     }}
                                     disabled={isProcessing || isRecording} // Disable if processing or recording
                                  ></textarea>
                                  <div className="flex justify-between items-center mt-4 w-full gap-2"> {/* Adjusted layout */}
-                                      {/* Speech-to-Text Button */}
+                                     {/* Speech-to-Text Button */}
                                      <button
-                                          onClick={handleToggleSpeechToText}
+                                         onClick={handleToggleSpeechToText}
                                           className={`flex items-center text-white px-4 py-2 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isRecording ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-400 hover:bg-gray-500'}`}
                                           // Disable if processing OR if the STT API is NOT supported/initialized.
                                           disabled={isProcessing || !isSTTReady || !recognitionRef.current}
@@ -1688,18 +2075,18 @@ Keep the response concise and professional.`;
                                                   <Mic className="w-4 h-4 mr-2 animate-pulse" /> Stop Recording
                                               </>
                                           ) : (
-                                               <>
+                                                <>
                                                     {/* Show a loading state for the button if STT is not ready */}
                                                    {isSTTReady ? (
-                                                        <>
+                                                       <>
                                                              <Mic className="w-4 h-4 mr-2" /> Start Recording
-                                                        </>
+                                                       </>
                                                    ) : (
                                                         'Loading STT...'
                                                    )}
                                                </>
                                            )}
-                                     </button>
+                                         </button>
 
                                       {/* Process Ticket button */}
                                      <button
@@ -1721,9 +2108,9 @@ Keep the response concise and professional.`;
                                       {processingError ? (
                                           <p className="text-red-600">{processingError}</p>
                                       ) : (
-                                          summary || 'AI-generated summary will appear here after processing the ticket.'
+                                         summary || 'AI-generated summary will appear here after processing the ticket.'
                                       )}
-                                 </div>
+                                   </div>
                             </section>
                         </div> {/* End First Column */}
 
@@ -1731,7 +2118,7 @@ Keep the response concise and professional.`;
                     <div className="flex flex-col gap-6 w-full lg:col-span-1">
                          <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                             <h2 className="text-xl font-semibold text-blue-700 mb-4">Knowledge Base Suggestions</h2>
-                             <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow">
+                            <div className="w-full p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto h-12/14 flex-grow">
                                  {suggestedKB.length > 0 && suggestedKB[0].id === 'KB-None' ? (
                                       <p className="text-gray-600 italic">{suggestedKB[0].title}</p>
                                  ) : suggestedKB.length > 0 ? (
@@ -1754,7 +2141,7 @@ Keep the response concise and professional.`;
                     <div className="flex flex-col gap-6 w-full lg:col-span-1">
                         <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                             <h2 className="text-xl font-semibold text-blue-700 mb-4">Response Suggestions</h2>
-                             <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow">
+                            <div className="w-full h-12/14 p-3 border rounded-md bg-gray-50 text-gray-700 overflow-y-auto flex-grow">
                                  {suggestedReplies.length > 0 ? (
                                      <ul className="list-disc pl-5 w-full">
                                          {suggestedReplies.map((reply, index) => (
@@ -1778,7 +2165,7 @@ Keep the response concise and professional.`;
                      <div className="flex flex-col gap-6 w-full lg:col-span-1">
                      <section className="bg-white p-6 rounded-lg shadow-md flex-grow w-full">
                         <h2 className="text-xl font-semibold text-blue-700 mb-4">Compose Reply</h2>
-                         <textarea
+                        <textarea
                             className="w-full h-11/14 p-3 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
                             placeholder="Compose your final reply here..."
                             value={composeReply}
@@ -1790,10 +2177,10 @@ Keep the response concise and professional.`;
                                  className="flex items-center bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors"
                              >
                                  <Eraser className="w-4 h-4 mr-1" /> Clear
-                             </button>
+                            </button>
                              <button
                                  onClick={handleSendAgentReply} // MODIFIED: Use the new send handler
-                                  className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                 className="flex items-center bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                   disabled={!composeReply.trim() || !selectedTicket} // Disable if empty or no ticket selected
                                  >
                                      <Send className="w-4 h-4 mr-1" /> Send Reply
@@ -1815,7 +2202,7 @@ Keep the response concise and professional.`;
                                     {hardcodedInteractionHistory.map(interaction => (
                                         <li key={interaction.id} className="mb-2 pb-2 border-b border-gray-200 last:border-b-0 text-sm text-gray-700">
                                             <span className="font-semibold">{interaction.type}:</span> {interaction.summary}
-                                            <p className="text-xs text-gray-500 mt-1">{formatHistoryDate(interaction.timestamp)}</p> {/* Display formatted date */}
+                                             <p className="text-xs text-gray-500 mt-1">{formatHistoryDate(interaction.timestamp)}</p> {/* Display formatted date */}
                                         </li>
                                     ))}
                                 </ul>
@@ -1839,10 +2226,10 @@ Keep the response concise and professional.`;
                                      placeholder="Add public notes here..."
                                      value={publicNotes}
                                      onChange={(e) => setPublicNotes(e.target.value)}
-                                ></textarea>
+                                 ></textarea>
                             </div>
                             {/* Private Notes Textarea */}
-                             <div className="bg-gray-50 p-3 rounded-md">
+                            <div className="bg-gray-50 p-3 rounded-md">
                                 <p className="text-sm font-semibold text-gray-600 mb-2">Private Notes:</p>
                                 <textarea
                                      className="w-full h-32 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-700"
@@ -1854,7 +2241,7 @@ Keep the response concise and professional.`;
                         </div>
                         {/* Conceptual Save Notes Button */}
                          <div className="flex justify-end mt-4">
-                             <button
+                            <button
                                  onClick={() => {
                                      // TODO: Implement saving notes to state/backend
                                      console.log("Simulating saving notes:", { publicNotes, privateNotes });
@@ -1865,7 +2252,7 @@ Keep the response concise and professional.`;
                                  className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors"
                              >
                                  Save Notes
-                             </button>
+                            </button>
                          </div>
                     </div>
                     {/* END MODIFIED: Notes Section */}
@@ -1878,7 +2265,7 @@ Keep the response concise and professional.`;
                             {/* Escalate Button */}
                             <button
                                 onClick={handleEscalateTicket}
-                                className="flex items-center bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                 className="flex items-center bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 disabled={!selectedTicket}
                             >
                                 <AlertTriangle className="w-4 h-4 mr-2" /> Escalate Ticket
@@ -1896,7 +2283,7 @@ Keep the response concise and professional.`;
                             ) : (
                                  // Merge Input Field and Confirm Button
                                  <div className="flex items-center gap-2">
-                                     <input
+                                   <input
                                          type="text"
                                          placeholder="Merge into Ticket ID..."
                                          value={mergeTicketId}
@@ -1914,20 +2301,20 @@ Keep the response concise and professional.`;
                                            onClick={() => { setShowMergeInput(false); setMergeTicketId(''); }}
                                            className="bg-gray-400 text-white px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
                                        >
-                                           Cancel
+                                          Cancel
                                        </button>
-                                 </div>
+                                   </div>
                             )}
 
                              {/* Simulate Close Ticket Button */}
                              <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                  disabled={!selectedTicket} // Disable if no ticket selected
                              >
-                                 Close Ticket (Simulated)
+                                Close Ticket (Simulated)
                              </button>
 
                              {/* TODO: Add other action buttons like Reply, etc. here if not handled elsewhere */}
-                        </div>
+                         </div>
                     </div>
                     {/* END ADDED: Other Actions Section */}
 
@@ -1951,7 +2338,7 @@ Keep the response concise and professional.`;
                          {selectedTicket
                              ? `Showing concerns related to ticket ${selectedTicket.id}. Select tickets below to send a tailored response.`
                              : 'Showing related concerns. Select tickets below to send a tailored response.'
-                         }
+                       }
                     </p>
 
                     {/* Related Tickets Grouped by Department */}
@@ -1968,9 +2355,9 @@ Keep the response concise and professional.`;
                                                  checked={selectedRelatedTicketIds.includes(ticket.id)}
                                                  onChange={(e) => handleRelatedCheckboxChange(ticket.id, e.target.checked)} // Use the local handler
                                              />
-                                            <div>
+                                             <div>
                                                 <div className="font-semibold text-gray-800 text-sm">{ticket.subject} (ID: {ticket.id})</div>
-                                                <div className="text-xs text-gray-600">Channel: {ticket.channel} | Status: {ticket.status}</div>
+                                                 <div className="text-xs text-gray-600">Channel: {ticket.channel} | Status: {ticket.status}</div>
                                                  <div className="text-xs text-gray-600">Assigned: {ticket.assignedTo || 'Unassigned'}</div>
                                             </div>
                                         </div>

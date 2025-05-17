@@ -1,8 +1,10 @@
-// src/app/page.tsx
-
-'use client'; // This page will use client-side features like state and effects for charts
-
-import React, { useState, useEffect } from 'react'; // Import useState and useEffect
+'use client';
+/**
+ * @module Dashboard
+ * @description This component provides a dashboard view for agents, displaying key metrics,
+ * charts, derived insights from ticket data, and navigation links to other features.
+ */
+import React, { useState, useEffect } from 'react';
 import { Bar } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,46 +15,58 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Ticket, User, MessageSquare, TrendingUp, PieChart, Bell } from 'lucide-react'; // Added icons for new sections
 
-// Import hardcoded ticket data to derive insights
+import { Ticket, User, MessageSquare, TrendingUp, PieChart, Bell } from 'lucide-react';
 import { hardcodedTickets } from './lib/hardcodedData';
 
-// Register Chart.js components
 ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
+  CategoryScale, // x-axis
+  LinearScale, // y-axis
+  BarElement, // Bar visual elements
+  Title, // Chart title
+  Tooltip, // Hover tooltips
+  Legend // Chart legend
 );
 
-// Hardcoded data for the charts and metrics (will be replaced with real data later)
-// Using dummy data for the chart for now, but could be generated from hardcodedTickets
+/**
+ * @constant {object} hardcodedTicketData
+ * @description Hardcoded data structure for the 'New vs Closed Tickets' bar chart.
+ * @property {string[]} labels - Labels for the x-axis (days of the week).
+ * @property {object[]} datasets - Data series for the chart (New Tickets and Closed Tickets).
+ * @property {string} datasets[].label - Label for the dataset.
+ * @property {number[]} datasets[].data - Array of data points for the dataset.
+ * @property {string} datasets[].backgroundColor - Background color for the bars.
+ * @property {string} datasets[].borderColor - Border color for the bars.
+ * @property {number} datasets[].borderWidth - Border width for the bars.
+ */
 const hardcodedTicketData = {
   labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
   datasets: [
     {
       label: 'New Tickets',
       data: [15, 20, 18, 25, 22, 30, 28],
-      backgroundColor: 'rgba(59, 130, 246, 0.6)', // Tailwind blue-500 with opacity
+      backgroundColor: 'rgba(59, 130, 246, 0.6)',
       borderColor: 'rgba(59, 130, 246, 1)',
       borderWidth: 1,
     },
     {
       label: 'Closed Tickets',
       data: [10, 18, 15, 20, 19, 25, 23],
-      backgroundColor: 'rgba(147, 197, 253, 0.6)', // Tailwind blue-300 with opacity
+      backgroundColor: 'rgba(147, 197, 253, 0.6)',
       borderColor: 'rgba(147, 197, 253, 1)',
       borderWidth: 1,
     },
   ],
 };
 
+/**
+ * @constant {object} chartOptions
+ * @description Configuration options for the Chart.js bar chart.
+ * Includes responsiveness, aspect ratio control, plugin options (legend, title), and scale configurations.
+ */
 const chartOptions = {
   responsive: true,
-  maintainAspectRatio: false, // Allow explicit height/width if needed
+  maintainAspectRatio: false,
   plugins: {
     legend: {
       position: 'top' as const,
@@ -60,21 +74,31 @@ const chartOptions = {
     title: {
       display: true,
       text: 'New vs Closed Tickets (Last 7 Days)',
-      color: '#1e3a8a', // Tailwind blue-900
+      color: '#1e3a8a',
     },
   },
   scales: {
     x: {
-      ticks: { color: '#4b5563' }, // Tailwind gray-600
-      grid: { color: '#e5e7eb' } // Tailwind gray-200
+      ticks: { color: '#4b5563' },
+      grid: { color: '#e5e7eb' }
     },
     y: {
-      ticks: { color: '#4b5563' }, // Tailwind gray-600
-      grid: { color: '#e5e7eb' } // Tailwind gray-200
+      ticks: { color: '#4b5563' },
+      grid: { color: '#e5e7eb' }
     }
   }
 };
 
+/**
+ * @constant {object} hardcodedMetrics
+ * @description Hardcoded key performance indicators (KPIs) for the dashboard overview panels.
+ * @property {number} liveTickets - Number of currently live tickets.
+ * @property {number} openTickets - Number of currently open tickets.
+ * @property {number} unassignedTickets - Number of currently unassigned tickets.
+ * @property {string} avgResponseTime - Average response time metric.
+ * @property {string} fcrRate - First Contact Resolution Rate metric.
+ * @property {string} csatScore - Customer Satisfaction Score metric.
+ */
 const hardcodedMetrics = {
   liveTickets: 45,
   openTickets: 30,
@@ -84,7 +108,13 @@ const hardcodedMetrics = {
   csatScore: '89%', // Customer Satisfaction Score
 };
 
-// Array for the feature buttons
+/**
+ * @constant {object[]} featureButtons
+ * @description Array defining the navigation buttons for different features.
+ * @property {string} name - The display name of the button.
+ * @property {React.ElementType} icon - The LucideReact icon component to display.
+ * @property {string} href - The URL the button links to.
+ */
 const featureButtons = [
   { name: 'Ticket Management', icon: Ticket, href: '/tickets' }, // TODO: Update hrefs
   { name: 'Customer Info', icon: User, href: '/customers' },
@@ -92,14 +122,32 @@ const featureButtons = [
 ];
 
 
+/**
+ * @function Dashboard
+ * @description The main functional component for the agent dashboard page.
+ * Displays performance metrics, a ticket chart, derived insights from hardcoded data,
+ * and navigation buttons.
+ * @returns {React.ReactElement} The JSX element for the dashboard page.
+ */
 export default function Dashboard() {
   // State to hold derived insights from hardcoded data
+  /**
+   * @constant {object} insights
+   * @description State variable holding calculated insights derived from `hardcodedTickets`.
+   * @property {{ issue: string; count: number }[]} mostFrequentIssues - Top issues by count.
+   * @property {{ product: string; count: number }[]} productsWithMostTickets - Top products by ticket count.
+   */
   const [insights, setInsights] = useState({
     mostFrequentIssues: [] as { issue: string; count: number }[],
     productsWithMostTickets: [] as { product: string; count: number }[],
   });
 
   // Derive insights from hardcoded tickets on component mount
+  /**
+   * @effect
+   * @description Calculates and sets the `insights` state (most frequent issues and products with most tickets)
+   * based on the `hardcodedTickets` data. This effect runs only once after the initial render.
+   */
   useEffect(() => {
     // Calculate most frequent issues
     const issueCounts = hardcodedTickets.reduce((acc, ticket) => {
@@ -173,7 +221,7 @@ export default function Dashboard() {
         {/* Performance Metrics Panel */}
         <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
           <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
-             <TrendingUp className="w-6 h-6 mr-2 text-blue-600"/> Performance Metrics
+               <TrendingUp className="w-6 h-6 mr-2 text-blue-600"/> Performance Metrics
           </h2>
           <p className="text-gray-700 mb-2"><span className="font-semibold">Avg. Response Time Today:</span> {hardcodedMetrics.avgResponseTime}</p>
           <p className="text-gray-700 mb-2"><span className="font-semibold">FCR Rate:</span> {hardcodedMetrics.fcrRate}</p>
@@ -183,7 +231,7 @@ export default function Dashboard() {
         {/* Emerging Trends (Derived from Hardcoded Data) */}
         <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
           <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
-             <PieChart className="w-6 h-6 mr-2 text-blue-600"/> Emerging Trends
+               <PieChart className="w-6 h-6 mr-2 text-blue-600"/> Emerging Trends
           </h2>
           <p className="text-gray-700 mb-2 font-semibold">Most Frequent Issues:</p>
           {insights.mostFrequentIssues.length > 0 ? (
@@ -205,24 +253,24 @@ export default function Dashboard() {
         </div>
 
         {/* Predictive Insights (Placeholder) */}
-         <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200 flex flex-col justify-center items-center text-gray-500 italic">
-             <h2 className="text-xl font-semibold text-blue-700 mb-4 text-center flex items-center">
-                <Bell className="w-6 h-6 mr-2 text-blue-600"/> Predictive Insights
-             </h2>
-             <p className="text-center">
-                <span className="font-semibold not-italic text-blue-900">AI Prediction:</span>
-                <br/>Identify customers at risk of churn or needing proactive help.
-             </p>
-             <p className="text-center text-sm mt-2">(Requires AI/ML model integration)</p>
-         </div>
+          <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200 flex flex-col justify-center items-center text-gray-500 italic">
+               <h2 className="text-xl font-semibold text-blue-700 mb-4 text-center flex items-center">
+                 <Bell className="w-6 h-6 mr-2 text-blue-600"/> Predictive Insights
+               </h2>
+               <p className="text-center">
+                 <span className="font-semibold not-italic text-blue-900">AI Prediction:</span>
+                 <br/>Identify customers at risk of churn or needing proactive help.
+               </p>
+               <p className="text-center text-sm mt-2">(Requires AI/ML model integration)</p>
+          </div>
 
-         {/* Customer Behavior Insights (Derived from Hardcoded Data) */}
+          {/* Customer Behavior Insights (Derived from Hardcoded Data) */}
         <div className="bg-white p-6 rounded-lg shadow-md border border-blue-200">
           <h2 className="text-xl font-semibold text-blue-700 mb-4 flex items-center">
-             <User className="w-6 h-6 mr-2 text-blue-600"/> Customer Behavior
+               <User className="w-6 h-6 mr-2 text-blue-600"/> Customer Behavior
           </h2>
           <p className="text-gray-700 mb-2 font-semibold">Products with Most Tickets:</p>
-           {insights.productsWithMostTickets.length > 0 ? (
+            {insights.productsWithMostTickets.length > 0 ? (
             <ul className="list-disc list-inside text-gray-600">
               {insights.productsWithMostTickets.map((item, index) => (
                 <li key={index}>{item.product} ({item.count})</li>
@@ -236,10 +284,10 @@ export default function Dashboard() {
 
       </div>
 
-       {/* Note about UI/UX */}
-       <footer className="mt-10 text-center text-gray-600 text-sm">
-         <p>General UI/UX Qualities (Consistency, Accessibility, Responsiveness, Error Handling) will be built into the implementation of all components.</p>
-       </footer>
+        {/* Note about UI/UX */}
+        <footer className="mt-10 text-center text-gray-600 text-sm">
+           <p>General UI/UX Qualities (Consistency, Accessibility, Responsiveness, Error Handling) will be built into the implementation of all components.</p>
+        </footer>
 
     </div>
   );
