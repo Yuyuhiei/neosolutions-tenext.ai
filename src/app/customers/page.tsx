@@ -2,10 +2,29 @@
 
 'use client'; // This is a Client Component
 
+/**
+ * @module CustomerInfoPage
+ * @description This component displays customer information derived from hardcoded ticket data.
+ * It allows searching for customers and viewing their basic profile and interaction history (tickets).
+ */
+
 import React, { useState, useEffect } from 'react';
-import { hardcodedTickets } from '../lib/hardcodedData'; // Import hardcoded ticket data
+// Import React hooks: useState for state management, useEffect for side effects.
+import { hardcodedTickets } from '../lib/hardcodedData';
+// Import hardcoded ticket data, which serves as the source for customer information in this demo.
 
 // Define the structure for a customer profile
+/**
+ * @interface Customer
+ * @description Defines the structure of a customer profile generated from ticket data.
+ * @property {string} id - A unique identifier for the customer (using email in this hardcoded example).
+ * @property {string} name - The name of the customer.
+ * @property {string} email - The email address of the customer.
+ * @property {string} phone - The phone number of the customer.
+ * @property {string[]} products - A list of unique products the customer has created tickets for.
+ * @property {string} notes - Placeholder for customer-specific notes (not populated from hardcoded data).
+ * @property {typeof hardcodedTickets} tickets - An array of ticket objects associated with this customer.
+ */
 interface Customer {
   id: string; // Using email as a unique ID for this hardcoded example
   name: string;
@@ -16,13 +35,45 @@ interface Customer {
   tickets: typeof hardcodedTickets; // Array of ticket objects associated with this customer
 }
 
+/**
+ * @function CustomerInfoPage
+ * @description The main functional component for the Customer Information page.
+ * It processes hardcoded ticket data to build customer profiles, allows searching,
+ * and displays a list of customers and details for a selected customer.
+ * @returns {React.ReactElement} The JSX element for the Customer Information page.
+ */
 export default function CustomerInfoPage() {
+  /**
+   * @constant {Customer[]} customers
+   * @description State variable holding the complete list of unique customer profiles derived from ticket data.
+   */
   const [customers, setCustomers] = useState<Customer[]>([]);
+
+  /**
+   * @constant {string} searchTerm
+   * @description State variable holding the current value of the search input field.
+   */
   const [searchTerm, setSearchTerm] = useState('');
+
+  /**
+   * @constant {Customer[]} filteredCustomers
+   * @description State variable holding the list of customer profiles filtered based on the `searchTerm`.
+   */
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
+
+  /**
+   * @constant {Customer | null} selectedCustomer
+   * @description State variable holding the customer object currently selected from the list, or null if none is selected.
+   */
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
 
   // Process hardcoded ticket data to create customer profiles on component mount
+  /**
+   * @effect
+   * @description Processes the `hardcodedTickets` array to aggregate tickets by customer email,
+   * creating a unique profile for each customer with their associated tickets and products.
+   * Sets the `customers` and `filteredCustomers` state. This effect runs only once on mount.
+   */
   useEffect(() => {
     const customerMap = new Map<string, Customer>();
 
@@ -62,6 +113,13 @@ export default function CustomerInfoPage() {
   }, []); // Empty dependency array ensures this runs only once on mount
 
   // Handle search input changes
+  /**
+   * @effect
+   * @description Filters the `customers` list based on the `searchTerm`.
+   * Matches search terms against customer name, email, phone, and ticket ID.
+   * Updates the `filteredCustomers` state.
+   * Runs whenever `searchTerm` or `customers` change.
+   */
   useEffect(() => {
     const lowerCaseSearchTerm = searchTerm.toLowerCase();
     const results = customers.filter(customer =>

@@ -1,8 +1,26 @@
 "use client";
 
+/**
+ * @module LowLevelConcerns
+ * @description This component implements a swipeable, TikTok-like interface for reviewing
+ * low-level customer concerns (simulated tickets) and selecting AI-generated responses.
+ * It demonstrates a potential pattern for quickly triaging and responding to common issues.
+ */
+
 import React, { useState, useEffect } from 'react';
+// Import React hooks: useState for state management, useEffect for side effects.
 
 // --- TypeScript Types ---
+/**
+ * @interface Ticket
+ * @description Defines the structure of a simulated low-level customer ticket.
+ * @property {string} id - Unique identifier for the ticket.
+ * @property {string} customer_name - The name of the customer.
+ * @property {string} issue_summary - A brief summary of the customer's issue.
+ * @property {number} tier - The perceived urgency or complexity tier (e.g., 0 for positive, 1 for common issues).
+ * @property {string} sentiment - The overall sentiment expressed by the customer (e.g., "frustrated", "concerned", "positive").
+ * @property {string} emotion - Specific emotions or states described (e.g., "urgent, annoyed", "anxious").
+ */
 interface Ticket {
   id: string;
   customer_name: string;
@@ -12,16 +30,34 @@ interface Ticket {
   emotion: string;
 }
 
+/**
+ * @interface AIResponse
+ * @description Defines the structure of a suggested AI-generated response.
+ * @property {string} tone - The suggested tone of the response (e.g., "empathetic", "efficient", "friendly").
+ * @property {string} text - The suggested response text.
+ */
 interface AIResponse {
   tone: string;
   text: string;
 }
 
+/**
+ * @interface SelectedResponse
+ * @extends AIResponse
+ * @description Defines the structure for a response that has been selected by the user,
+ * including the ID of the ticket it was chosen for.
+ * @property {string} ticketId - The ID of the ticket for which the response was selected.
+ */
 interface SelectedResponse extends AIResponse {
   ticketId: string;
 }
 
 // --- Hardcoded Ticket Data ---
+/**
+ * @constant {Ticket[]} initialTickets
+ * @description An array of hardcoded objects simulating initial low-level customer tickets
+ * for the swipeable interface.
+ */
 const initialTickets: Ticket[] = [
   {
     "id": "ticket001",
@@ -98,8 +134,12 @@ const initialTickets: Ticket[] = [
 ];
 
 // --- Styles ---
-// These styles are crucial for the TikTok-like card animations and base layout.
-// They would typically be in a global CSS file or a CSS module.
+/**
+ * @constant {string} globalStyles
+ * @description A string containing CSS styles for the component.
+ * These styles are injected into the document head and are crucial for
+ * the layout and the TikTok-like card transition animations.
+ */
 const globalStyles = `
   body {
     font-family: 'Roboto', 'Inter', sans-serif;
@@ -205,6 +245,14 @@ const globalStyles = `
 `;
 
 // --- Mock API Call ---
+/**
+ * @function fetchAIResponses
+ * @description A mock asynchronous function that simulates calling an AI API
+ * to get suggested responses for a given ticket.
+ * @param {Ticket} ticketDetails - The ticket object for which to fetch responses.
+ * @returns {Promise<{ responses: AIResponse[] }>} A promise resolving to an object containing an array of AIResponse suggestions.
+ * @async
+ */
 async function fetchAIResponses(ticketDetails: Ticket): Promise<{ responses: AIResponse[] }> {
   console.log("Fetching AI responses for:", ticketDetails.customer_name, ticketDetails.issue_summary);
   await new Promise(resolve => setTimeout(resolve, 700)); // Simulate API delay
@@ -232,17 +280,50 @@ async function fetchAIResponses(ticketDetails: Ticket): Promise<{ responses: AIR
 
 
 // --- Components ---
+/**
+ * @interface TicketCardProps
+ * @description Props for the TicketCard component.
+ * @property {Ticket} ticket - The ticket object to display.
+ * @property {(response: AIResponse) => void} onResponseSelect - Callback function when a response is selected.
+ * @property {boolean} isExiting - Boolean indicating if the card should play its exit animation.
+ */
 interface TicketCardProps {
   ticket: Ticket;
   onResponseSelect: (response: AIResponse) => void;
   isExiting: boolean;
 }
 
+/**
+ * @function TicketCard
+ * @description A functional React component that renders a single ticket card with AI-suggested responses.
+ * It includes loading states for responses and handles the card's entry/exit animations based on `isExiting`.
+ * @param {TicketCardProps} props - The component's props.
+ * @returns {React.ReactElement} The JSX element for the ticket card.
+ */
 const TicketCard: React.FC<TicketCardProps> = ({ ticket, onResponseSelect, isExiting }) => {
+  /**
+   * @constant {AIResponse[]} aiResponses
+   * @description State variable holding the AI-generated response suggestions for the current ticket.
+   */
   const [aiResponses, setAiResponses] = useState<AIResponse[]>([]);
+
+  /**
+   * @constant {boolean} isLoadingResponses
+   * @description State variable indicating whether AI responses are currently being fetched.
+   */
   const [isLoadingResponses, setIsLoadingResponses] = useState(true);
+
+  /**
+   * @constant {string} animationClass
+   * @description State variable controlling the CSS class for the card's entry/exit animation ('', 'active', 'prev').
+   */
   const [animationClass, setAnimationClass] = useState(''); // For entry animation
 
+  /**
+   * @effect
+   * @description Fetches AI responses for the current `ticket` and controls the card's
+   * animation class based on `isExiting`. Runs when `ticket` or `isExiting` change.
+   */
   useEffect(() => {
     // Fetch responses when ticket changes
     setIsLoadingResponses(true);
@@ -304,14 +385,55 @@ const TicketCard: React.FC<TicketCardProps> = ({ ticket, onResponseSelect, isExi
   );
 };
 
+/**
+ * @function App
+ * @description The main functional component for the Low-Level Concerns page.
+ * It manages the state of the ticket queue, the currently displayed ticket,
+ * selected responses, and the card transition animations. It injects global styles
+ * and loads/saves selected responses to local storage.
+ * @returns {React.ReactElement} The JSX element for the Low-Level Concerns interface.
+ */
 const App: React.FC = () => {
+  /**
+   * @constant {Ticket[]} tickets
+   * @description State variable holding the array of all low-level tickets to be processed.
+   * Initialized with `initialTickets`.
+   */
   const [tickets] = useState<Ticket[]>(initialTickets);
+
+  /**
+   * @constant {number} currentTicketIndex
+   * @description State variable holding the index of the ticket currently being displayed.
+   * -1 indicates that all tickets have been processed.
+   */
   const [currentTicketIndex, setCurrentTicketIndex] = useState(0);
+
+  /**
+   * @constant {SelectedResponse[]} selectedResponses
+   * @description State variable holding the array of responses selected by the user for each ticket.
+   * Stored and loaded from local storage.
+   */
   const [selectedResponses, setSelectedResponses] = useState<SelectedResponse[]>([]);
+
+  /**
+   * @constant {boolean} isTransitioning
+   * @description State variable indicating whether a card transition animation is currently in progress.
+   */
   const [isTransitioning, setIsTransitioning] = useState(false);
+
+  /**
+   * @constant {number} renderKey
+   * @description State variable used as a key to force re-rendering (and thus re-animation)
+   * of the active `TicketCard` component when the ticket changes or when starting over.
+   */
   const [renderKey, setRenderKey] = useState(0); // Used to force re-render of the active card
 
   // Inject global styles
+  /**
+   * @effect
+   * @description Injects the `globalStyles` CSS and the Google Fonts link into the document head
+   * when the component mounts. Cleans up the injected elements when the component unmounts.
+   */
   useEffect(() => {
     const styleElement = document.createElement('style');
     styleElement.innerHTML = globalStyles;
@@ -328,6 +450,11 @@ const App: React.FC = () => {
   }, []);
 
   // Load selected responses from localStorage on mount
+  /**
+   * @effect
+   * @description Attempts to load previously selected responses from the browser's
+   * local storage when the component mounts and updates the `selectedResponses` state.
+   */
     useEffect(() => {
     const storedResponses = localStorage.getItem('selectedUserResponsesReact');
     if (storedResponses) {
@@ -335,6 +462,15 @@ const App: React.FC = () => {
     }
   }, []);
 
+  /**
+   * @function handleResponseSelect
+   * @description Handles the event when a user selects an AI-suggested response for the current ticket.
+   * - Adds the selected response and ticket ID to the `selectedResponses` state.
+   * - Saves the updated `selectedResponses` to local storage.
+   * - Triggers the exit animation for the current card by setting `isTransitioning` to true.
+   * - After the animation duration, updates the `currentTicketIndex` to move to the next ticket or indicate completion.
+   * @param {AIResponse} response - The AI response object that was selected.
+   */
   const handleResponseSelect = (response: AIResponse) => {
     if (isTransitioning) return;
 
