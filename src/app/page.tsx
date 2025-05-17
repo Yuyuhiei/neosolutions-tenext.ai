@@ -88,9 +88,6 @@ const hardcodedMetrics = {
 const featureButtons = [
   { name: 'Ticket Management', icon: Ticket, href: '/tickets' }, // TODO: Update hrefs
   { name: 'Customer Info', icon: User, href: '/customers' },
-  { name: 'Communication Tools', icon: MessageSquare, href: '/communication' },
-  { name: 'Knowledge Management', icon: Book, href: '/knowledge' },
-  { name: 'Agent Workflow', icon: Settings, href: '/workflow' },
 ];
 
 

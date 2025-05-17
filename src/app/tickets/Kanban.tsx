@@ -3,7 +3,7 @@
 'use client'; // This page uses client-side state and interactions
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'; // Import hooks
-import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone } from 'lucide-react'; // Import icons
+import { PlusCircle, Filter, ArrowUpDown, XCircle, Send, Eraser, Mic, Phone, AlertTriangle, Merge } from 'lucide-react'; // Import icons (Added AlertTriangle, Merge)
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'; // Import Gemini library
 import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedData'; // Import hardcoded data
 
@@ -16,7 +16,7 @@ import { hardcodedKnowledgeBase, hardcodedDepartments } from '../lib/hardcodedDa
 const apiKey = "AIzaSyC1NaNuNzIATe-tlPbO53P7S08_nIT4ZrM";
 
 if (!apiKey) {
-    console.error("GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
+    console.error("NEXT_PUBLIC_GOOGLE_API_KEY environment variable not set. Gemini calls will not work.");
     // You might want to display a user-facing error message if the key is missing
 }
 
@@ -78,6 +78,9 @@ interface Ticket {
   publicNotes?: string; // ADDED: Public notes field
   privateNotes?: string; // ADDED: Private notes field
   conversation?: Message[]; // ADDED: Conversation history
+  slaStatus?: 'Within SLA' | 'Approaching SLA' | 'Breached SLA'; // ADDED: SLA Status
+  escalationLevel?: 'None' | 'Level 1' | 'Level 2' | 'Level 3'; // ADDED: Escalation Level
+  mergedInto?: string | null; // ADDED: ID of the ticket this one was merged into
 }
 
 // ADDED: Hardcoded Interaction History (Universal for demo - distinct from conversation)
@@ -114,6 +117,8 @@ const initialTickets: Ticket[] = [
     ],
     publicNotes: 'Customer is very frustrated.', // ADDED Sample Note
     privateNotes: 'Need to escalate if password reset fails again.', // ADDED Sample Note
+    slaStatus: 'Approaching SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
   {
     id: 'T002',
@@ -131,6 +136,8 @@ const initialTickets: Ticket[] = [
     ],
      publicNotes: '',
     privateNotes: 'Check billing system for exact date.',
+    slaStatus: 'Within SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
    {
     id: 'T003',
@@ -146,6 +153,8 @@ const initialTickets: Ticket[] = [
     conversation: [], // Empty conversation initially
      publicNotes: 'Forward to product team.',
     privateNotes: '',
+    slaStatus: 'Within SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
    {
     id: 'T004',
@@ -161,6 +170,8 @@ const initialTickets: Ticket[] = [
     conversation: [], // Empty conversation initially
      publicNotes: '',
     privateNotes: 'Agent A needs to call customer directly.',
+    slaStatus: 'Breached SLA', // ADDED Sample SLA Status
+    escalationLevel: 'Level 1', // ADDED Sample Escalation Level
   },
    {
     id: 'T005',
@@ -176,6 +187,8 @@ const initialTickets: Ticket[] = [
     conversation: [], // Empty conversation initially
     publicNotes: '',
     privateNotes: '',
+    slaStatus: 'Within SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
     {
     id: 'T006',
@@ -191,6 +204,8 @@ const initialTickets: Ticket[] = [
     conversation: [], // Empty conversation initially
      publicNotes: '',
     privateNotes: '',
+    slaStatus: 'Within SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
    {
     id: 'T007',
@@ -206,6 +221,8 @@ const initialTickets: Ticket[] = [
     conversation: [], // Empty conversation initially
      publicNotes: '',
     privateNotes: '',
+    slaStatus: 'Within SLA', // ADDED Sample SLA Status
+    escalationLevel: 'None', // ADDED Sample Escalation Level
   },
 ];
 // --- End Hardcoded Data ---
@@ -228,11 +245,20 @@ const priorityColors: Record<Ticket['priority'], string> = {
   'Urgent': 'text-red-600 font-bold',
 };
 
+// ADDED: Helper for SLA Colors (Tailwind classes)
+const slaColors: Record<NonNullable<Ticket['slaStatus']>, string> = {
+    'Within SLA': 'text-green-600',
+    'Approaching SLA': 'text-yellow-600',
+    'Breached SLA': 'text-red-600',
+};
+
+
 // Define the order of columns/statuses for the Kanban board
 const kanbanStatuses: Ticket['status'][] = ['New', 'Open', 'In Progress', 'Pending', 'Resolved', 'Closed'];
 
 // ADDED: Helper function to add a new hardcoded ticket with AI assignment
 const addNewHardcodedTicket = async (setTickets: React.Dispatch<React.SetStateAction<Ticket[]>>, model: GenerativeModel | null, initialConcern: string = 'Automated transcription: Customer called with a general inquiry.') => {
+    // ...
      // Generate a more robust unique ID for demo purposes
      const newTicketId = `T${Date.now().toString().slice(-6)}-${Math.random().toFixed(3).slice(-3)}`;
      const now = new Date().toISOString();
@@ -312,6 +338,8 @@ ${formattedDepartments}
          conversation: [{ sender: 'Customer', text: initialConcern, timestamp: now }], // Initial customer message
          publicNotes: '',
          privateNotes: `Ticket created automatically by AI after call. Initial Assignment: ${assignedDepartmentAndAgent}`,
+         slaStatus: 'Within SLA', // Default SLA status for new tickets
+         escalationLevel: 'None', // Default escalation level
      };
 
      setTickets(prevTickets => [...prevTickets, simulatedNewTicket]);
@@ -342,6 +370,10 @@ export default function TicketManagementPage() {
 
     // ADDED: State for conversation history in the modal
     const [currentConversation, setCurrentConversation] = useState<Message[]>([]);
+
+    // ADDED: State for Merge feature UI
+    const [showMergeInput, setShowMergeInput] = useState(false);
+    const [mergeTicketId, setMergeTicketId] = useState('');
 
 
   // --- State for AI Processing (Moved from page.tsx) ---
@@ -670,6 +702,100 @@ export default function TicketManagementPage() {
     };
 
 
+    // ADDED: Handle Merging Tickets
+    const handleMergeTickets = () => {
+        if (!selectedTicket) return;
+        setShowMergeInput(true); // Show the merge input field
+    };
+
+    // ADDED: Handle Confirm Merge
+    const handleConfirmMerge = () => {
+        if (!selectedTicket || !mergeTicketId.trim()) {
+            alert("Please select a ticket and enter a ticket ID to merge into.");
+            return;
+        }
+
+        const targetTicket = tickets.find(t => t.id === mergeTicketId.trim());
+
+        if (!targetTicket) {
+            alert(`Ticket ID "${mergeTicketId.trim()}" not found.`);
+            return;
+        }
+
+        if (selectedTicket.id === targetTicket.id) {
+            alert("Cannot merge a ticket into itself.");
+            return;
+        }
+
+        // TODO: Implement actual merge logic (combine conversations, notes, update status, etc.)
+        console.log(`Simulating merging ticket ${selectedTicket.id} into ${targetTicket.id}`);
+
+        // Simulate updating the merged ticket and removing the current one
+        setTickets(prevTickets => prevTickets.map(ticket => {
+            if (ticket.id === targetTicket.id) {
+                // Simulate adding current ticket's description/conversation to target ticket
+                const mergedDescription = `${ticket.description || ''}\n\n--- Merged from ${selectedTicket.id} ---\n\n${selectedTicket.description || ''}`;
+                const mergedConversation = [...(ticket.conversation || []), ...(selectedTicket.conversation || [])];
+                const mergedPublicNotes = `${ticket.publicNotes || ''}\n${selectedTicket.publicNotes || ''}`;
+                const mergedPrivateNotes = `${ticket.privateNotes || ''}\n${selectedTicket.privateNotes || ''}`;
+
+                return {
+                    ...ticket,
+                    description: mergedDescription.trim(),
+                    conversation: mergedConversation,
+                    publicNotes: mergedPublicNotes.trim(),
+                    privateNotes: mergedPrivateNotes.trim(),
+                    updatedAt: new Date().toISOString(),
+                    // Optionally change status of target ticket, e.g., to 'In Progress'
+                    // status: 'In Progress',
+                };
+            }
+            return ticket;
+        }).filter(ticket => ticket.id !== selectedTicket.id)); // Remove the merged ticket
+
+        alert(`Ticket ${selectedTicket.id} merged into ${targetTicket.id} (simulated)!`);
+        handleDetailedViewClose(); // Close the modal after merging
+        setShowMergeInput(false); // Hide merge input
+        setMergeTicketId(''); // Clear merge input
+    };
+
+    // ADDED: Handle Escalating Ticket
+    const handleEscalateTicket = () => {
+        if (!selectedTicket) return;
+
+        // TODO: Implement escalation logic (update status, priority, notify team, etc.)
+        console.log(`Simulating escalating ticket ${selectedTicket.id}`);
+
+        // Simulate changing priority and adding a note
+        const escalatedPriority = selectedTicket.priority === 'Low' ? 'Medium' :
+                                  selectedTicket.priority === 'Medium' ? 'High' :
+                                  selectedTicket.priority === 'High' ? 'Urgent' : 'Urgent';
+
+        const escalationNote = `Ticket escalated to ${escalatedPriority} priority.`;
+
+        setTickets(prevTickets => prevTickets.map(ticket => {
+            if (ticket.id === selectedTicket.id) {
+                 const updatedPrivateNotes = `${ticket.privateNotes || ''}\n${new Date().toLocaleString()}: ${escalationNote}`;
+                return {
+                    ...ticket,
+                    priority: escalatedPriority,
+                    escalationLevel: selectedTicket.escalationLevel === 'None' ? 'Level 1' :
+                                     selectedTicket.escalationLevel === 'Level 1' ? 'Level 2' :
+                                     selectedTicket.escalationLevel === 'Level 2' ? 'Level 3' : 'Level 3',
+                    privateNotes: updatedPrivateNotes.trim(),
+                    updatedAt: new Date().toISOString(),
+                    // Optionally change status, e.g., to 'In Progress' or 'Pending'
+                    // status: 'Pending',
+                };
+            }
+            return ticket;
+        }));
+
+        alert(`Ticket ${selectedTicket.id} escalated to ${escalatedPriority} priority (simulated)!`);
+        // Optionally keep modal open or close it
+    };
+
+
   // --- Handle Processing with Direct Gemini Call (Moved from page.tsx) ---
     const handleProcessTicket = async () => {
         // Use the combined text for processing from the modal's input
@@ -876,6 +1002,19 @@ ${formattedKB}
          }
     };
 
+
+    // Function to simulate sending reply (This is now just a simulation alert, not the actual send)
+     // Renamed the old handleSendReply to avoid conflict and keep the new one for actual send.
+    const handleSimulateSendReplyAlert = () => {
+        if (composeReply.trim()) {
+            alert(`Simulating sending reply (old method):\n\n${composeReply}`);
+            // Don't clear composeReply here if the actual send button clears it
+        } else {
+             alert('Compose reply is empty.');
+        }
+    };
+
+
     // Function to populate compose reply with a suggestion (Moved from page.tsx)
     const handleSuggestionClick = (suggestion: string) => {
         setComposeReply(suggestion);
@@ -907,7 +1046,7 @@ ${formattedKB}
       {/* Header */}
       <header className="mb-6 text-center">
         <h1 className="text-4xl font-bold text-blue-900 mb-2">
-          Ticket Management (Kanban)
+          Ticket Management
         </h1>
         <p className="text-lg text-gray-700">
           View and manage all customer tickets in a Kanban board.
@@ -1004,6 +1143,13 @@ ${formattedKB}
                                    <div className={`text-sm ${priorityColors[ticket.priority]} mb-2`}>
                                       Priority: {ticket.priority}
                                    </div>
+                                   {/* ADDED: SLA Indicator on card */}
+                                    {ticket.slaStatus && (
+                                        <div className={`text-xs ${slaColors[ticket.slaStatus]} mb-2 flex items-center`}>
+                                            <AlertTriangle className="w-3 h-3 mr-1" /> {ticket.slaStatus}
+                                        </div>
+                                    )}
+                                   {/* END ADDED */}
                                   <div className="text-xs text-gray-500">Last Update: {new Date(ticket.updatedAt).toLocaleString()}</div>
 
                                   {/* Action Controls (Simulated) */}
@@ -1121,7 +1267,7 @@ ${formattedKB}
       )}
        {/* --- End Manual Ticket Creation Modal --- */}
 
-       {/* ADDED: Incoming Call Simulation Popup */}
+       {/* Incoming Call Simulation Popup */}
         {showIncomingCallPopup && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                 <div className="bg-white p-6 rounded-lg shadow-lg text-center">
@@ -1229,6 +1375,36 @@ ${formattedKB}
                             <p className="text-sm font-semibold text-gray-600">Last Updated:</p>
                             <p className="text-gray-800">{new Date(selectedTicket.updatedAt).toLocaleString()}</p>
                         </div>
+                         {/* ADDED: SLA Status Display */}
+                         <div>
+                             <p className="text-sm font-semibold text-gray-600">SLA Status:</p>
+                              {selectedTicket.slaStatus ? (
+                                  <span className={`text-gray-800 ${slaColors[selectedTicket.slaStatus]}`}>
+                                      {selectedTicket.slaStatus}
+                                  </span>
+                              ) : (
+                                  <span className="text-gray-500 italic">N/A</span>
+                              )}
+                         </div>
+                         {/* END ADDED */}
+                          {/* ADDED: Escalation Level Display */}
+                         <div>
+                             <p className="text-sm font-semibold text-gray-600">Escalation Level:</p>
+                             <span className="text-gray-800">
+                                 {selectedTicket.escalationLevel || 'None'}
+                             </span>
+                         </div>
+                         {/* END ADDED */}
+                          {/* ADDED: Merged Into Display */}
+                          {selectedTicket.mergedInto && (
+                              <div>
+                                   <p className="text-sm font-semibold text-gray-600">Merged Into:</p>
+                                   <span className="text-gray-800 italic">
+                                       {selectedTicket.mergedInto}
+                                   </span>
+                               </div>
+                          )}
+                         {/* END ADDED */}
                    </div>
 
 
@@ -1478,24 +1654,70 @@ ${formattedKB}
                     {/* END MODIFIED: Notes Section */}
 
 
-                    {/* TODO: Add buttons for actions like Reply, Merge, Escalate, Close, etc. within the modal */}
-                     <div className="flex justify-end space-x-4 mt-6">
-                          <button className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
-                              Reply (Simulated)
-                          </button>
-                           <button className="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition-colors">
-                              Close Ticket (Simulated)
-                          </button>
-                          {/* More action buttons here */}
-                     </div>
+                    {/* ADDED: Other Actions Section */}
+                    <div className="mb-6">
+                        <h3 className="text-lg font-semibold text-blue-800 mb-3 border-b pb-2">Other Actions</h3>
+                        <div className="flex flex-wrap items-center gap-4">
+                            {/* Escalate Button */}
+                            <button
+                                onClick={handleEscalateTicket}
+                                className="flex items-center bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                disabled={!selectedTicket}
+                            >
+                                <AlertTriangle className="w-4 h-4 mr-2" /> Escalate Ticket
+                            </button>
 
-                </div>
-            </div>
-        )}
-        {/* --- End Detailed Ticket View Modal --- */}
+                            {/* Merge Button */}
+                            {!showMergeInput ? (
+                                <button
+                                    onClick={handleMergeTickets}
+                                    className="flex items-center bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    disabled={!selectedTicket || selectedTicket.mergedInto !== undefined} // Disable if no ticket or already merged
+                                >
+                                    <Merge className="w-4 h-4 mr-2" /> Merge Ticket
+                                </button>
+                            ) : (
+                                 // Merge Input Field and Confirm Button
+                                 <div className="flex items-center gap-2">
+                                     <input
+                                         type="text"
+                                         placeholder="Merge into Ticket ID..."
+                                         value={mergeTicketId}
+                                         onChange={(e) => setMergeTicketId(e.target.value)}
+                                         className="p-2 border rounded-md text-gray-700 w-40"
+                                     />
+                                      <button
+                                          onClick={handleConfirmMerge}
+                                          className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          disabled={!mergeTicketId.trim()}
+                                      >
+                                          Confirm Merge
+                                      </button>
+                                       <button
+                                           onClick={() => { setShowMergeInput(false); setMergeTicketId(''); }}
+                                           className="bg-gray-400 text-white px-4 py-2 rounded-md hover:bg-gray-500 transition-colors"
+                                       >
+                                           Cancel
+                                       </button>
+                                 </div>
+                            )}
 
+                             {/* Simulate Close Ticket Button */}
+                             <button className="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                 disabled={!selectedTicket} // Disable if no ticket selected
+                             >
+                                 Close Ticket (Simulated)
+                             </button>
 
-        {/* TODO: Implement other features like Merging, SLA visual indicators, Escalation UI */}
+                             {/* TODO: Add other action buttons like Reply, etc. here if not handled elsewhere */}
+                        </div>
+                    </div>
+                    {/* END ADDED: Other Actions Section */}
+
+               </div>
+           </div>
+       )}
+       {/* --- End Detailed Ticket View Modal --- */}
 
 
      </div>
