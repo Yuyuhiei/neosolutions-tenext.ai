@@ -876,19 +876,6 @@ ${formattedKB}
          }
     };
 
-
-    // Function to simulate sending reply (This is now just a simulation alert, not the actual send)
-     // Renamed the old handleSendReply to avoid conflict and keep the new one for actual send.
-    const handleSimulateSendReplyAlert = () => {
-        if (composeReply.trim()) {
-            alert(`Simulating sending reply (old method):\n\n${composeReply}`);
-            // Don't clear composeReply here if the actual send button clears it
-        } else {
-             alert('Compose reply is empty.');
-        }
-    };
-
-
     // Function to populate compose reply with a suggestion (Moved from page.tsx)
     const handleSuggestionClick = (suggestion: string) => {
         setComposeReply(suggestion);
@@ -903,46 +890,6 @@ ${formattedKB}
       }
       return filtered;
   }, [tickets, filterStatus]);
-
-
-    // --- Sorting Logic (Corrected for potential nulls) ---
-    const sortTicketsManually = (ticketsToSort: Ticket[]) => {
-        return [...ticketsToSort].sort((a, b) => {
-            const aValue = a[sortBy];
-            const bValue = b[sortBy];
-
-            // Handle null values explicitly based on sort order
-            if (aValue === null && bValue !== null) {
-                return sortOrder === 'asc' ? -1 : 1; // Nulls first for asc, last for desc
-            }
-            if (aValue !== null && bValue === null) {
-                return sortOrder === 'asc' ? 1 : -1; // Non-nulls first for asc, last for desc
-            }
-            if (aValue === null && bValue === null) {
-                return 0; // Both are null, treat as equal
-            }
-
-            // Now we know neither aValue nor bValue are null for the comparison
-            // Use type assertions after null checks
-            if (typeof aValue === 'string' && typeof bValue === 'string') {
-                return sortOrder === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
-            }
-            if (typeof aValue === 'number' && typeof bValue === 'number') {
-                return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
-            }
-            // Handle date comparison if sortBy is a date field
-            if (sortBy === 'createdAt' || sortBy === 'updatedAt' || sortBy === 'lastMessageAt') {
-                const dateA = new Date(aValue as string); // Safe to cast to string after null check
-                const dateB = new Date(bValue as string); // Safe to cast to string after null check
-                return sortOrder === 'asc' ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
-            }
-
-            // Fallback for other types - ensure comparison is safe
-            if (aValue !== null && aValue !== undefined && bValue !== null && bValue !== undefined && aValue < bValue) return sortOrder === 'asc' ? -1 : 1;
-            if (aValue !== null && aValue !== undefined && bValue !== null && bValue !== undefined && aValue > bValue) return sortOrder === 'asc' ? 1 : -1;
-             return 0; // Values are equal
-        });
-    };
 
 
   // --- Rendering ---

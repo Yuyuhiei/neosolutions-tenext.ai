@@ -17,6 +17,15 @@ export const hardcodedKnowledgeBase = [
     { id: 'KB009', title: 'Supported Browsers', content: 'Our application is best viewed on the latest versions of Chrome, Firefox, Safari, and Edge. Compatibility issues may occur with older browser versions.' },
     { id: 'KB010', title: 'Account Verification Process', content: 'To verify your account for certain actions (like changing email or password), you may be asked to provide information like your account creation date, recent activity, or answer security questions.' },
 ];
+ 
+// ADDED: Hardcoded Departments and Agents for Assignment
+export const hardcodedDepartments = [
+    { name: 'Technical Support', agents: ['Agent A', 'Agent C', 'Agent E'], description: 'Handles login issues, app errors, website problems, and technical troubleshooting.' },
+    { name: 'Billing Department', agents: ['Agent B', 'Agent D'], description: 'Manages billing inquiries, payment issues, refunds, and subscription questions.' },
+    { name: 'Feature Requests', agents: ['Product Team'], description: 'Processes new feature suggestions and product feedback.' },
+    { name: 'Customer Relations', agents: ['Agent F'], description: 'Deals with complaints, escalations, and general customer feedback.' },
+    // Add more departments/agents as needed
+];
 
 // Hardcoded Ticket Data
 export const hardcodedTickets = [
