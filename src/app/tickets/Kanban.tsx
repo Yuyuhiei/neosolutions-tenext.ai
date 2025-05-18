@@ -1868,11 +1868,28 @@ ${formattedKB}
        {/* Incoming Call Simulation Popup */}
         {showIncomingCallPopup && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white p-6 rounded-lg shadow-lg text-center">
+                <div className="bg-white p-6 rounded-lg shadow-lg text-center w-full max-w-sm"> {/* Added max-w-sm for better sizing */}
                     {callSimulationPhase === 'ringing' && (
                         <>
+                            {/* Placeholder for Client Picture */}
+                            <img
+                                src="https://placehold.co/100x100/E0E0E0/000000?text=Client" // Placeholder image URL
+                                alt="Client Placeholder"
+                                className="w-24 h-24 rounded-full mx-auto mb-4 object-cover" // Styled for a profile picture
+                            />
+
+                            {/* Client Name (Placeholder) */}
+                            <h3 className="text-xl font-semibold text-gray-800 mb-2">Incoming Call from: Lauvigne</h3> {/* Placeholder Name */}
+
+                             {/* Client Number (Placeholder) */}
+                            <p className="text-gray-600 text-sm mb-2">Number: +1 (555) 123-4567</p> {/* Placeholder Number */}
+
+                            {/* "Customer in database" text */}
+                            <p className="text-green-700 font-medium mb-4">The customer is already on our database.</p>
+
                             <Phone className="w-12 h-12 text-green-500 mx-auto mb-4 animate-pulse" />
-                            <h3 className="text-xl font-semibold text-gray-800 mb-4">Incoming Call...</h3>
+                            <h3 className="text-xl font-semibold text-gray-800 mb-4">Ringing...</h3> {/* Changed text to Ringing */}
+
                             {/* Answer/End buttons (for simulation they just close the popup for now) */}
                             <div className="flex justify-center space-x-4">
                                 <button
@@ -1898,6 +1915,18 @@ ${formattedKB}
 
                     {callSimulationPhase === 'ai_answering' && (
                         <>
+                             {/* Placeholder for Client Picture (same as above) */}
+                            <img
+                                src="https://placehold.co/100x100/E0E0E0/000000?text=Client" // Placeholder image URL
+                                alt="Client Placeholder"
+                                className="w-24 h-24 rounded-full mx-auto mb-4 object-cover" // Styled for a profile picture
+                            />
+                             {/* Client Name (Placeholder) */}
+                            <h3 className="text-xl font-semibold text-gray-800 mb-2">Call from: John Doe</h3> {/* Placeholder Name */}
+                             {/* Client Number (Placeholder) */}
+                            <p className="text-gray-600 text-sm mb-4">Number: +1 (555) 123-4567</p> {/* Placeholder Number */}
+
+
                             <Mic className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-pulse" /> {/* Using Mic icon for AI */}
                             <h3 className="text-xl font-semibold text-gray-800 mb-4">AI Agent Answering...</h3>
                             <p className="text-gray-600">The AI is currently attempting to resolve the concern.</p>
@@ -1907,7 +1936,7 @@ ${formattedKB}
                 </div>
             </div>
         )}
-     {/* END ADDED: Incoming Call Simulation Popup */}
+        {/* END ADDED: Incoming Call Simulation Popup */}
 
 
        {/* --- Detailed Ticket View Modal (Including AI Processing and Conversation) --- */}
