@@ -146,7 +146,7 @@ const globalStyles = `
     overscroll-behavior-y: contain;
     margin: 0;
     /* Changed background to white */
-    background: white;
+    background-color: var(--color-blue-50);
     /* Changed default text color to black for visibility on white background */
     color: black;
   }
@@ -194,7 +194,7 @@ const globalStyles = `
     z-index: 5;
   }
   .ticket-content-wrapper-react { /* Renamed to avoid conflict if old html is around */
-    background-color: rgba(0, 0, 0, 0.1); /* Slightly lighter background for contrast */
+    background-color: white;
     border-radius: 12px;
     padding: 1.5rem; /* 24px */
     width: 95%; /* Adjust width as needed */
